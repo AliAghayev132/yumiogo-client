@@ -380,3 +380,4 @@ const { isConnected, handleTyping } = useRoomSocket(roomId, {
   onMessage: (data) => { /* ... */ },
 })
 ```
+# yumiogo-client
