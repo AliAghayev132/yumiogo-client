@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+/* Fix browser autofill styling on inputs */
+.autofill-fix:-webkit-autofill,
+.autofill-fix:-webkit-autofill:hover,
+.autofill-fix:-webkit-autofill:focus,
+.autofill-fix:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 30px #ffffff inset !important;
+  transition: background-color 5000s ease-in-out 0s;
+}

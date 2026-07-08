@@ -1,0 +1,8 @@
+export { DashboardPage } from './DashboardPage'
+export { ProfilePage } from './ProfilePage'
+export { UsersPage } from './UsersPage'
+export { RestaurantsPage } from './RestaurantsPage'
+export { ReviewsPage } from './ReviewsPage'
+export { ReportsPage } from './ReportsPage'
+export { AnalyticsPage } from './AnalyticsPage'
+export { SettingsPage } from './SettingsPage'
