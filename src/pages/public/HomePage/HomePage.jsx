@@ -1,76 +1,576 @@
+import { useState } from 'react'
 import { Link } from 'react-router'
-import { ArrowRight, Boxes, ShieldCheck, Zap } from 'lucide-react'
+import { motion } from 'framer-motion'
+import {
+  MapPin,
+  Heart,
+  Sparkles,
+  Users,
+  Star,
+  ChevronDown,
+  ArrowRight,
+  Search,
+  Clock,
+  UtensilsCrossed,
+  Apple,
+  Play,
+  Home,
+  User,
+} from 'lucide-react'
 import { SEO } from '@components'
 
-const features = [
+/* ─────────────────────────── content ─────────────────────────── */
+
+const NAV_LINKS = [
+  { label: 'Features', href: '#features' },
+  { label: 'How it works', href: '#how' },
+  { label: 'FAQ', href: '#faq' },
+]
+
+const STEPS = [
+  { title: 'Sign up', text: 'Create your account in seconds — or browse as a guest first.' },
+  { title: 'Set your tastes', text: 'Pick the cuisines and dietary preferences you love.' },
+  { title: 'Explore nearby', text: 'Browse the map and see what’s open around you right now.' },
+  { title: 'Save favourites', text: 'Heart the spots you love and organize them into lists.' },
+  { title: 'Follow friends', text: 'See honest reviews and lists from people you trust.' },
+  { title: 'Get surprised', text: 'Can’t decide? Spin once and let Yumio pick for you.' },
+]
+
+const FAQS = [
   {
-    icon: Boxes,
-    title: 'Batteries included',
-    description:
-      'Redux Toolkit Query, routing, auth flow, UI kit and a real-time socket layer wired up out of the box.',
+    q: 'What is Yumio?',
+    a: 'Yumio is a restaurant discovery app for finding the best places to eat around you — powered by a map, honest reactions from real visitors, and recommendations from friends you follow.',
   },
   {
-    icon: ShieldCheck,
-    title: 'Auth ready',
-    description:
-      'Login, OTP register, token refresh and role-based route guards following a shared API contract.',
+    q: 'How do ratings work?',
+    a: 'Instead of cold star ratings, people react to a visit with “Liked it”, “It was fine” or “Didn’t like it”. We aggregate those reactions into every restaurant’s score, so you always know how a place actually feels.',
   },
   {
-    icon: Zap,
-    title: 'Fast by default',
-    description:
-      'Vite build, lazy-loaded route groups and manual vendor chunking for snappy loads.',
+    q: 'What are collaborative lists?',
+    a: 'Any favourites list can be made collaborative — share the link and everyone you invite can add places. Perfect for planning group dinners, trips, or building the definitive “best kebab in Baku” list together.',
+  },
+  {
+    q: 'What does “Surprise me” do?',
+    a: 'One tap picks a random open restaurant near you. Don’t like the pick? Spin again — Yumio never repeats a suggestion in the same session.',
+  },
+  {
+    q: 'Is Yumio free?',
+    a: 'Yes — discovering restaurants, writing reviews, and building lists are all completely free.',
   },
 ]
 
-export const HomePage = () => {
-  return (
-    <>
-      <SEO title="Home" path="/" />
+/* ─────────────────────────── small pieces ─────────────────────────── */
 
-      {/* Hero */}
-      <section className="max-w-6xl mx-auto px-6 py-20 text-center">
-        <span className="inline-block px-3 py-1 rounded-full bg-green-50 text-green-700 text-sm font-medium mb-6">
-          Fullstack Starter Template
-        </span>
-        <h1 className="text-4xl md:text-5xl font-bold text-gray-900 tracking-tight max-w-3xl mx-auto">
-          Build your next product on a clean, generic foundation.
-        </h1>
-        <p className="mt-6 text-lg text-gray-600 max-w-2xl mx-auto">
-          A React + Vite SPA wired to a matching Express/Mongoose API. Swap the example
-          <span className="font-medium text-gray-900"> Post </span>
-          resource for your own and ship.
-        </p>
-        <div className="mt-8 flex items-center justify-center gap-3">
-          <Link
-            to="/register"
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-green-600 text-white font-medium hover:bg-green-700 transition-colors"
-          >
-            Get started <ArrowRight className="w-4 h-4" />
-          </Link>
-          <Link
-            to="/login"
-            className="px-6 py-3 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
-          >
-            Sign in
-          </Link>
+const Logo = ({ className = '' }) => (
+  <span className={`flex items-center gap-2 ${className}`}>
+    <span className="w-9 h-9 rounded-xl bg-green-500 text-[#07120B] flex items-center justify-center font-extrabold text-lg">
+      Y
+    </span>
+    <span className="text-lg font-bold text-white">
+      Yumio<span className="text-green-400">.</span>
+    </span>
+  </span>
+)
+
+const fadeUp = {
+  initial: { opacity: 0, y: 24 },
+  whileInView: { opacity: 1, y: 0 },
+  viewport: { once: true, margin: '-80px' },
+  transition: { duration: 0.5, ease: 'easeOut' },
+}
+
+/* ────────────────────── phone mockup (pure CSS) ────────────────────── */
+
+const MiniCard = ({ gradient, name, meta }) => (
+  <div className="rounded-2xl bg-white/[0.06] border border-white/10 overflow-hidden">
+    <div className={`h-16 bg-gradient-to-br ${gradient}`} />
+    <div className="p-2.5">
+      <p className="text-[11px] font-semibold text-white leading-tight">{name}</p>
+      <p className="text-[9px] text-green-400 mt-0.5">
+        Open now <span className="text-gray-500">· {meta}</span>
+      </p>
+    </div>
+  </div>
+)
+
+const PhoneMockup = () => (
+  <div className="relative mx-auto w-[290px] sm:w-[310px]">
+    {/* glow */}
+    <div className="absolute -inset-10 bg-green-500/20 blur-3xl rounded-full" aria-hidden />
+
+    {/* frame */}
+    <div className="relative rounded-[2.8rem] border border-white/15 bg-[#0B1710] p-2 shadow-2xl shadow-black/60">
+      <div className="rounded-[2.3rem] bg-[#07120B] overflow-hidden">
+        {/* notch */}
+        <div className="flex justify-center pt-2.5 pb-1">
+          <div className="w-24 h-5 bg-black rounded-full" />
         </div>
-      </section>
 
-      {/* Features */}
-      <section className="max-w-6xl mx-auto px-6 pb-24">
-        <div className="grid gap-6 md:grid-cols-3">
-          {features.map(({ icon: Icon, title, description }) => (
-            <div key={title} className="p-6 rounded-xl border border-gray-200 bg-white">
-              <div className="w-11 h-11 rounded-lg bg-green-50 text-green-600 flex items-center justify-center mb-4">
-                <Icon className="w-5 h-5" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
-              <p className="mt-2 text-sm text-gray-600">{description}</p>
+        {/* app screen */}
+        <div className="px-4 pb-5 pt-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[9px] text-gray-500">Location</p>
+              <p className="text-[12px] font-semibold text-white flex items-center gap-1">
+                <MapPin className="w-3 h-3 text-green-400" /> Baku, Azerbaijan
+              </p>
             </div>
-          ))}
+            <div className="w-7 h-7 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center text-[9px] font-bold text-green-300">
+              LA
+            </div>
+          </div>
+
+          <div className="mt-3 flex items-center gap-2 rounded-xl bg-white/[0.06] border border-white/10 px-3 py-2">
+            <Search className="w-3.5 h-3.5 text-gray-500" />
+            <span className="text-[10px] text-gray-500">Search restaurants, cuisines...</span>
+          </div>
+
+          <p className="mt-4 mb-2 text-[11px] font-bold text-white">Near you</p>
+          <div className="grid grid-cols-2 gap-2">
+            <MiniCard gradient="from-orange-400/80 to-rose-500/70" name="SAHiL Bar & Restaurant" meta="1.2 km" />
+            <MiniCard gradient="from-emerald-400/80 to-teal-600/70" name="Caravan Baku" meta="800 m" />
+          </div>
+
+          <div className="mt-3 rounded-2xl bg-gradient-to-r from-green-500/15 to-green-400/5 border border-green-500/25 p-3 flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-bold text-white">Not sure where to eat?</p>
+              <p className="text-[9px] text-gray-400">We got you covered.</p>
+            </div>
+            <span className="text-[10px] font-bold text-[#07120B] bg-green-400 rounded-full px-2.5 py-1.5">
+              Surprise me
+            </span>
+          </div>
+
+          {/* tab bar */}
+          <div className="mt-4 flex justify-around rounded-2xl bg-white/[0.05] border border-white/10 py-2">
+            <Home className="w-4 h-4 text-green-400" />
+            <Search className="w-4 h-4 text-gray-600" />
+            <Heart className="w-4 h-4 text-gray-600" />
+            <User className="w-4 h-4 text-gray-600" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* floating chips */}
+    <motion.div
+      initial={{ opacity: 0, x: -16 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: 0.5, duration: 0.5 }}
+      className="absolute -left-16 top-24 hidden sm:flex items-center gap-1.5 rounded-full bg-[#0D1A12] border border-white/15 px-3 py-2 shadow-xl"
+    >
+      <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+      <span className="text-xs font-semibold text-white">4.8</span>
+      <span className="text-[10px] text-gray-500">(1k+ reviews)</span>
+    </motion.div>
+    <motion.div
+      initial={{ opacity: 0, x: 16 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: 0.7, duration: 0.5 }}
+      className="absolute -right-14 top-52 hidden sm:flex items-center gap-1.5 rounded-full bg-[#0D1A12] border border-white/15 px-3 py-2 shadow-xl"
+    >
+      <span className="text-sm">😊</span>
+      <span className="text-xs font-semibold text-green-400">Liked it</span>
+    </motion.div>
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.9, duration: 0.5 }}
+      className="absolute -right-8 bottom-24 hidden sm:flex items-center gap-1.5 rounded-full bg-[#0D1A12] border border-white/15 px-3 py-2 shadow-xl"
+    >
+      <Clock className="w-3.5 h-3.5 text-green-400" />
+      <span className="text-xs font-semibold text-white">Open now</span>
+    </motion.div>
+  </div>
+)
+
+/* ─────────────────────────── page ─────────────────────────── */
+
+export const HomePage = () => {
+  const [openFaq, setOpenFaq] = useState(0)
+
+  return (
+    <div className="min-h-screen bg-[#07120B] text-white antialiased selection:bg-green-500/30">
+      <SEO
+        title="Yumio — Find your next favourite restaurant"
+        description="Discover the best restaurants around you — honest reviews, shared lists with friends, and a little surprise when you can't decide."
+      />
+
+      {/* ───────── nav ───────── */}
+      <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#07120B]/80 backdrop-blur-xl">
+        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+          <a href="#top" aria-label="Yumio">
+            <Logo />
+          </a>
+          <nav className="hidden md:flex items-center gap-8">
+            {NAV_LINKS.map((l) => (
+              <a key={l.href} href={l.href} className="text-sm text-gray-400 hover:text-white transition-colors">
+                {l.label}
+              </a>
+            ))}
+          </nav>
+          <div className="flex items-center gap-3">
+            <Link to="/login" className="text-sm font-medium text-gray-300 hover:text-white transition-colors">
+              Log in
+            </Link>
+            <a
+              href="#download"
+              className="text-sm font-semibold rounded-full bg-green-400 text-[#07120B] px-4 py-2 hover:bg-green-300 transition-colors"
+            >
+              Get the app
+            </a>
+          </div>
+        </div>
+      </header>
+
+      {/* ───────── hero ───────── */}
+      <section id="top" className="relative overflow-hidden">
+        {/* background blobs */}
+        <div className="absolute -top-32 -left-32 w-[480px] h-[480px] bg-green-500/10 blur-3xl rounded-full" aria-hidden />
+        <div className="absolute top-40 -right-40 w-[520px] h-[520px] bg-orange-500/[0.07] blur-3xl rounded-full" aria-hidden />
+
+        <div className="relative max-w-6xl mx-auto px-6 pt-16 pb-24 lg:pt-24 grid lg:grid-cols-2 gap-16 items-center">
+          <div>
+            <motion.div {...fadeUp}>
+              <span className="inline-flex items-center gap-2 rounded-full border border-green-500/30 bg-green-500/10 px-4 py-1.5 text-xs font-semibold text-green-300">
+                <Sparkles className="w-3.5 h-3.5" />
+                Discover · Save · Share
+              </span>
+            </motion.div>
+
+            <motion.h1
+              {...fadeUp}
+              transition={{ ...fadeUp.transition, delay: 0.08 }}
+              className="mt-6 text-4xl sm:text-5xl lg:text-[3.4rem] font-extrabold leading-[1.08] tracking-tight"
+            >
+              Find your next
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-green-300 to-green-500">
+                {' '}favourite{' '}
+              </span>
+              restaurant
+            </motion.h1>
+
+            <motion.p
+              {...fadeUp}
+              transition={{ ...fadeUp.transition, delay: 0.16 }}
+              className="mt-6 text-lg text-gray-400 max-w-md leading-relaxed"
+            >
+              The best spots around you — honest reactions from real visitors, lists you build with
+              friends, and a little surprise when you can’t decide.
+            </motion.p>
+
+            <motion.div
+              {...fadeUp}
+              transition={{ ...fadeUp.transition, delay: 0.24 }}
+              className="mt-9 flex flex-wrap items-center gap-4"
+            >
+              <a
+                href="#download"
+                className="inline-flex items-center gap-2 rounded-full bg-green-400 text-[#07120B] font-bold px-7 py-3.5 hover:bg-green-300 transition-colors"
+              >
+                Get the app <ArrowRight className="w-4 h-4" />
+              </a>
+              <a
+                href="#features"
+                className="inline-flex items-center gap-2 rounded-full border border-white/15 px-7 py-3.5 font-semibold text-gray-200 hover:bg-white/5 transition-colors"
+              >
+                Explore features
+              </a>
+            </motion.div>
+
+            <motion.div
+              {...fadeUp}
+              transition={{ ...fadeUp.transition, delay: 0.32 }}
+              className="mt-10 flex items-center gap-4"
+            >
+              <div className="flex -space-x-2">
+                {['bg-emerald-500', 'bg-orange-500', 'bg-teal-500', 'bg-rose-500'].map((c) => (
+                  <span key={c} className={`w-8 h-8 rounded-full ${c} border-2 border-[#07120B]`} />
+                ))}
+              </div>
+              <p className="text-sm text-gray-500">
+                Loved by food explorers <span className="text-gray-300 font-semibold">across Baku</span>
+              </p>
+            </motion.div>
+          </div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, ease: 'easeOut', delay: 0.2 }}
+          >
+            <PhoneMockup />
+          </motion.div>
         </div>
       </section>
-    </>
+
+      {/* ───────── features (bento) ───────── */}
+      <section id="features" className="relative py-24">
+        <div className="max-w-6xl mx-auto px-6">
+          <motion.div {...fadeUp} className="text-center max-w-2xl mx-auto">
+            <p className="text-sm font-bold uppercase tracking-widest text-green-400">Why Yumio?</p>
+            <h2 className="mt-3 text-3xl sm:text-4xl font-extrabold tracking-tight">
+              Everything you need to eat better
+            </h2>
+            <p className="mt-4 text-gray-400">
+              One app for discovering, deciding and remembering every great place you eat.
+            </p>
+          </motion.div>
+
+          <div className="mt-14 grid md:grid-cols-3 gap-5">
+            {/* large card — map */}
+            <motion.div
+              {...fadeUp}
+              className="md:col-span-2 rounded-3xl border border-white/10 bg-white/[0.03] p-8 relative overflow-hidden"
+            >
+              <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-green-500/10 blur-2xl rounded-full" aria-hidden />
+              <div className="w-12 h-12 rounded-2xl bg-green-500/15 border border-green-500/30 flex items-center justify-center">
+                <MapPin className="w-6 h-6 text-green-400" />
+              </div>
+              <h3 className="mt-5 text-xl font-bold">Discover on the map</h3>
+              <p className="mt-2 text-gray-400 max-w-md">
+                See every restaurant around you in real time — filter by distance, rating, price and
+                what’s open right now.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-2">
+                {['Open now', '≤ 1 km', '4.5★+', 'Halal', 'Vegan options'].map((chip) => (
+                  <span
+                    key={chip}
+                    className="rounded-full border border-white/15 bg-white/[0.04] px-3.5 py-1.5 text-xs font-medium text-gray-300"
+                  >
+                    {chip}
+                  </span>
+                ))}
+              </div>
+            </motion.div>
+
+            {/* reviews */}
+            <motion.div
+              {...fadeUp}
+              transition={{ ...fadeUp.transition, delay: 0.08 }}
+              className="rounded-3xl border border-white/10 bg-white/[0.03] p-8"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center">
+                <Star className="w-6 h-6 text-amber-400" />
+              </div>
+              <h3 className="mt-5 text-xl font-bold">Honest reactions</h3>
+              <p className="mt-2 text-gray-400 text-sm">
+                No confusing stars — visits are rated the way people actually feel.
+              </p>
+              <div className="mt-5 space-y-2">
+                <span className="flex w-fit items-center gap-1.5 rounded-full bg-green-500/15 px-3 py-1.5 text-xs font-semibold text-green-300">
+                  😊 Liked it
+                </span>
+                <span className="flex w-fit items-center gap-1.5 rounded-full bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-300">
+                  🙂 It was fine
+                </span>
+                <span className="flex w-fit items-center gap-1.5 rounded-full bg-rose-500/15 px-3 py-1.5 text-xs font-semibold text-rose-300">
+                  ☹️ Didn’t like it
+                </span>
+              </div>
+            </motion.div>
+
+            {/* lists */}
+            <motion.div
+              {...fadeUp}
+              className="rounded-3xl border border-white/10 bg-white/[0.03] p-8"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center">
+                <Heart className="w-6 h-6 text-rose-400" />
+              </div>
+              <h3 className="mt-5 text-xl font-bold">Lists you build together</h3>
+              <p className="mt-2 text-gray-400 text-sm">
+                Save favourites into lists — private, public or collaborative, so friends can add
+                places too.
+              </p>
+              <div className="mt-5 flex items-center gap-3 rounded-2xl bg-white/[0.04] border border-white/10 p-3">
+                <Users className="w-4 h-4 text-green-400 shrink-0" />
+                <p className="text-xs text-gray-300">
+                  “Date night favourites” <span className="text-gray-500">· 13 places · 3 friends</span>
+                </p>
+              </div>
+            </motion.div>
+
+            {/* surprise */}
+            <motion.div
+              {...fadeUp}
+              transition={{ ...fadeUp.transition, delay: 0.08 }}
+              className="md:col-span-2 rounded-3xl border border-green-500/25 bg-gradient-to-r from-green-500/10 to-transparent p-8 relative overflow-hidden"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center gap-6">
+                <div className="w-12 h-12 rounded-2xl bg-green-500/20 border border-green-500/40 flex items-center justify-center shrink-0">
+                  <Sparkles className="w-6 h-6 text-green-300" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-xl font-bold">Can’t decide? Surprise me.</h3>
+                  <p className="mt-2 text-gray-400 max-w-lg">
+                    One tap spins the wheel and picks a random open spot near you. Never the same
+                    suggestion twice.
+                  </p>
+                </div>
+                <span className="inline-flex w-fit items-center gap-2 rounded-full bg-green-400 text-[#07120B] font-bold px-6 py-3">
+                  <UtensilsCrossed className="w-4 h-4" /> Spin it
+                </span>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* ───────── how it works ───────── */}
+      <section id="how" className="py-24 border-t border-white/[0.06]">
+        <div className="max-w-6xl mx-auto px-6">
+          <motion.div {...fadeUp} className="text-center max-w-2xl mx-auto">
+            <p className="text-sm font-bold uppercase tracking-widest text-green-400">How it works</p>
+            <h2 className="mt-3 text-3xl sm:text-4xl font-extrabold tracking-tight">
+              From “where should we eat?” to “table for two”
+            </h2>
+          </motion.div>
+
+          <div className="mt-14 grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {STEPS.map((s, i) => (
+              <motion.div
+                key={s.title}
+                {...fadeUp}
+                transition={{ ...fadeUp.transition, delay: (i % 3) * 0.08 }}
+                className="rounded-3xl border border-white/10 bg-white/[0.03] p-7"
+              >
+                <span className="inline-flex w-10 h-10 items-center justify-center rounded-full bg-green-500/15 border border-green-500/30 text-sm font-extrabold text-green-300">
+                  {i + 1}
+                </span>
+                <h3 className="mt-4 text-lg font-bold">{s.title}</h3>
+                <p className="mt-1.5 text-sm text-gray-400 leading-relaxed">{s.text}</p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ───────── FAQ ───────── */}
+      <section id="faq" className="py-24 border-t border-white/[0.06]">
+        <div className="max-w-3xl mx-auto px-6">
+          <motion.div {...fadeUp} className="text-center">
+            <p className="text-sm font-bold uppercase tracking-widest text-green-400">FAQ</p>
+            <h2 className="mt-3 text-3xl sm:text-4xl font-extrabold tracking-tight">Common questions</h2>
+          </motion.div>
+
+          <div className="mt-12 space-y-3">
+            {FAQS.map((f, i) => {
+              const open = openFaq === i
+              return (
+                <motion.div
+                  key={f.q}
+                  {...fadeUp}
+                  className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden"
+                >
+                  <button
+                    onClick={() => setOpenFaq(open ? null : i)}
+                    className="w-full flex items-center justify-between gap-4 px-6 py-5 text-left"
+                  >
+                    <span className="font-semibold">{f.q}</span>
+                    <ChevronDown
+                      className={`w-5 h-5 text-gray-500 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+                    />
+                  </button>
+                  {open && <p className="px-6 pb-6 text-gray-400 leading-relaxed">{f.a}</p>}
+                </motion.div>
+              )
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* ───────── download band ───────── */}
+      <section id="download" className="py-24">
+        <div className="max-w-6xl mx-auto px-6">
+          <motion.div
+            {...fadeUp}
+            className="relative overflow-hidden rounded-[2.5rem] border border-green-500/25 bg-gradient-to-br from-green-500/15 via-[#0B1710] to-[#07120B] px-8 py-16 text-center"
+          >
+            <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-[500px] h-[300px] bg-green-500/15 blur-3xl rounded-full" aria-hidden />
+            <div className="relative">
+              <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
+                Ready to eat better?
+              </h2>
+              <p className="mt-4 text-gray-400 max-w-md mx-auto">
+                Join Yumio today and never ask “where should we eat?” again.
+              </p>
+              <div className="mt-9 flex flex-wrap justify-center gap-4">
+                <a
+                  href="#"
+                  className="inline-flex items-center gap-3 rounded-2xl bg-white text-[#07120B] px-6 py-3.5 font-semibold hover:bg-gray-100 transition-colors"
+                >
+                  <Apple className="w-6 h-6" />
+                  <span className="text-left leading-tight">
+                    <span className="block text-[10px] font-medium text-gray-500">Download on the</span>
+                    App Store
+                  </span>
+                </a>
+                <a
+                  href="#"
+                  className="inline-flex items-center gap-3 rounded-2xl border border-white/20 bg-white/5 px-6 py-3.5 font-semibold hover:bg-white/10 transition-colors"
+                >
+                  <Play className="w-6 h-6 text-green-400" />
+                  <span className="text-left leading-tight">
+                    <span className="block text-[10px] font-medium text-gray-500">Get it on</span>
+                    Google Play
+                  </span>
+                </a>
+              </div>
+              <p className="mt-5 text-xs text-gray-600">Coming soon to both stores · Baku first 🇦🇿</p>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ───────── footer ───────── */}
+      <footer className="border-t border-white/[0.06] py-14">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-10">
+            <div>
+              <Logo />
+              <p className="mt-4 text-sm text-gray-500 max-w-xs leading-relaxed">
+                Find your next favourite restaurant — discover, save and share the places worth
+                eating at.
+              </p>
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-gray-300">Product</h4>
+              <ul className="mt-4 space-y-2.5 text-sm text-gray-500">
+                <li><a href="#features" className="hover:text-white transition-colors">Features</a></li>
+                <li><a href="#how" className="hover:text-white transition-colors">How it works</a></li>
+                <li><a href="#faq" className="hover:text-white transition-colors">FAQ</a></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-gray-300">Support</h4>
+              <ul className="mt-4 space-y-2.5 text-sm text-gray-500">
+                <li>
+                  <a href="mailto:support@yumio.app" className="hover:text-white transition-colors">
+                    support@yumio.app
+                  </a>
+                </li>
+                <li><Link to="/login" className="hover:text-white transition-colors">Admin login</Link></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-gray-300">Get the app</h4>
+              <ul className="mt-4 space-y-2.5 text-sm text-gray-500">
+                <li><a href="#download" className="hover:text-white transition-colors">iOS — coming soon</a></li>
+                <li><a href="#download" className="hover:text-white transition-colors">Android — coming soon</a></li>
+              </ul>
+            </div>
+          </div>
+          <div className="mt-12 pt-8 border-t border-white/[0.06] flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-gray-600">
+            <span>© {new Date().getFullYear()} Yumio. All rights reserved.</span>
+            <span className="flex items-center gap-5">
+              <span className="hover:text-gray-400 cursor-pointer">Privacy</span>
+              <span className="hover:text-gray-400 cursor-pointer">Terms</span>
+              <span className="hover:text-gray-400 cursor-pointer">Cookies</span>
+            </span>
+          </div>
+        </div>
+      </footer>
+    </div>
   )
 }
