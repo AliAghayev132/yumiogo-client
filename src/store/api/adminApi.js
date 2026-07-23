@@ -66,6 +66,11 @@ export const adminApi = baseApi.injectEndpoints({
       invalidatesTags: [{ type: 'AdminReport', id: 'LIST' }, 'AdminStats'],
     }),
 
+    // Image uploads (multipart) — fetchBaseQuery handles FormData automatically
+    uploadImages: builder.mutation({
+      query: ({ kind, formData }) => ({ url: `/uploads/${kind}`, method: 'POST', body: formData }),
+    }),
+
     // Form metadata (enums) + settings
     getMeta: builder.query({
       query: () => '/admin/meta',
@@ -117,6 +122,7 @@ export const {
   useDeleteReviewMutation,
   useGetReportsQuery,
   useResolveReportMutation,
+  useUploadImagesMutation,
   useGetMetaQuery,
   useGetSettingsQuery,
   useUpdateSettingsMutation,

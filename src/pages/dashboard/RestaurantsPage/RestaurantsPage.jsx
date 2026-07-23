@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Search, Trash2, Star, Plus, Pencil } from 'lucide-react'
 import Swal from 'sweetalert2'
 import { Card, Table, Badge, Button, Input, PageLoader } from '@components'
+import { getImageUrl } from '@utils'
 import {
   useGetAdminRestaurantsQuery,
   useDeleteRestaurantMutation,
@@ -84,7 +85,7 @@ export const RestaurantsPage = () => {
                   <Table.Cell>
                     <div className="flex items-center gap-3">
                       {r.coverImages?.[0] ? (
-                        <img src={r.coverImages[0]} alt="" className="w-10 h-10 rounded-lg object-cover" />
+                        <img src={getImageUrl(r.coverImages[0])} alt="" className="w-10 h-10 rounded-lg object-cover" />
                       ) : (
                         <div className="w-10 h-10 rounded-lg bg-gray-100" />
                       )}
