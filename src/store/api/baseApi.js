@@ -6,7 +6,10 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 // token from the auth slice unless an Authorization header is already set
 // (e.g. a one-off reset token during password reset).
 const baseQuery = fetchBaseQuery({
-  baseUrl: `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api`,
+  // Production: same origin as the site (nginx -> the API server), so
+  // https://yumiogo.com/api works with no env at all.
+  // Development: the local API server. Override with VITE_API_URL.
+  baseUrl: `${import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:3042' : '')}/api`,
   credentials: 'include',
   prepareHeaders: (headers, { getState }) => {
     if (!headers.get('Authorization')) {

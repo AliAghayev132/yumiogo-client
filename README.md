@@ -294,10 +294,10 @@ pnpm lint       # → eslint .
 ```bash
 # Backend API-nin baza URL-i (SONDA /api OLMADAN).
 # RTK Query base query buna `/api` əlavə edir, Socket.IO isə bu origin-ə qoşulur.
-VITE_API_URL=http://localhost:5000
+VITE_API_URL=
 ```
 
-Vite mühit dəyişənləri `import.meta.env.VITE_*` kimi oxunur və yalnız `VITE_` prefiksli olanlar client-ə çatır. Təyin olunmadıqda kod `http://localhost:5000`-ə fallback edir.
+Vite mühit dəyişənləri `import.meta.env.VITE_*` kimi oxunur və yalnız `VITE_` prefiksli olanlar client-ə çatır. Boş buraxıldıqda: **development**-də `http://localhost:3042`, **production**-da isə saytla eyni origin (`https://yumiogo.com/api`) istifadə olunur.
 
 ---
 

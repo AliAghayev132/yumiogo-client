@@ -8,7 +8,10 @@ import { useSelector } from 'react-redux'
 
 const SocketContext = createContext(null)
 
-const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+// Production: same origin as the site (socket.io defaults to it when undefined).
+// Development: the local API server. Override with VITE_API_URL.
+const SOCKET_URL =
+  import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:3042' : undefined)
 
 // Provides a single authenticated Socket.IO connection to the whole app.
 // The connection is (re)created whenever the auth token / user changes and is
