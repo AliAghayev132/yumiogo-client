@@ -1,5 +1,6 @@
 import { clsx } from 'clsx'
 import { TrendingUp, TrendingDown } from 'lucide-react'
+import { CountUp } from './CountUp'
 
 export const StatCard = ({
   title,
@@ -16,11 +17,13 @@ export const StatCard = ({
   }
 
   return (
-    <div className={clsx('bg-white rounded-xl border border-gray-200 p-6', className)}>
+    <div className={clsx('bg-white rounded-xl border border-gray-200 p-6 transition-shadow hover:shadow-md', className)}>
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm text-gray-500 mb-1">{title}</p>
-          <p className="text-2xl font-bold text-gray-900">{value}</p>
+          <p className="text-2xl font-bold text-gray-900">
+            {typeof value === 'number' ? <CountUp value={value} /> : value}
+          </p>
           {change && (
             <div
               className={clsx(

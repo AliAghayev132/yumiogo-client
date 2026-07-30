@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import Swal from 'sweetalert2'
-import { Card, Table, Badge, Button, PageLoader } from '@components'
+import { Card, Table, Badge, Button, SkeletonTable } from '@components'
 import { useGetAdminReviewsQuery, useDeleteReviewMutation } from '@store/api'
 
 const sentimentMeta = {
@@ -62,7 +62,7 @@ export const ReviewsPage = () => {
 
       <Card className="overflow-hidden">
         {isLoading ? (
-          <PageLoader />
+          <SkeletonTable rows={6} />
         ) : (
           <Table>
             <Table.Header>

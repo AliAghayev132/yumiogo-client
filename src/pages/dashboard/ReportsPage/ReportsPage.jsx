@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Check, X, FileText, Store, User as UserIcon } from 'lucide-react'
 import Swal from 'sweetalert2'
-import { Card, Table, Badge, Button, PageLoader } from '@components'
+import { Card, Table, Badge, Button, SkeletonTable } from '@components'
 import { useGetReportsQuery, useResolveReportMutation } from '@store/api'
 
 const typeIcon = { review: FileText, restaurant: Store, user: UserIcon }
@@ -46,7 +46,7 @@ export const ReportsPage = () => {
 
       <Card className="overflow-hidden">
         {isLoading ? (
-          <PageLoader />
+          <SkeletonTable rows={5} />
         ) : (
           <Table>
             <Table.Header>

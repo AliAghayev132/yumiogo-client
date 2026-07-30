@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Search, Trash2, Star, Plus, Pencil } from 'lucide-react'
 import Swal from 'sweetalert2'
-import { Card, Table, Badge, Button, Input, PageLoader } from '@components'
+import { Card, Table, Badge, Button, Input, SkeletonTable } from '@components'
 import { getImageUrl } from '@utils'
 import {
   useGetAdminRestaurantsQuery,
@@ -66,7 +66,7 @@ export const RestaurantsPage = () => {
 
       <Card className="overflow-hidden">
         {isLoading ? (
-          <PageLoader />
+          <SkeletonTable rows={6} />
         ) : (
           <Table>
             <Table.Header>

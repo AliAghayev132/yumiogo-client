@@ -1,5 +1,5 @@
 import { Users, Store, Star, Flag, Clock, UserPlus } from 'lucide-react'
-import { StatCard, Card, PageLoader } from '@components'
+import { StatCard, Card, SkeletonStats, Skeleton } from '@components'
 import { useGetStatsQuery, useGetAnalyticsQuery } from '@store/api'
 
 const timeAgo = (iso) => {
@@ -14,7 +14,23 @@ export const DashboardPage = () => {
   const { data, isLoading } = useGetStatsQuery()
   const { data: analyticsData } = useGetAnalyticsQuery()
 
-  if (isLoading) return <PageLoader />
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <SkeletonStats />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Card className="lg:col-span-2 p-6">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-40 w-full mt-6" />
+          </Card>
+          <Card className="p-6">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-32 w-full mt-6" />
+          </Card>
+        </div>
+      </div>
+    )
+  }
 
   const stats = data?.data?.stats || {}
   const activity = data?.data?.activity || []

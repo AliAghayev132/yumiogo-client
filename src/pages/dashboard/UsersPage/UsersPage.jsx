@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Search, Ban, CheckCircle2, Trash2, Shield, ShieldOff } from 'lucide-react'
 import Swal from 'sweetalert2'
-import { Card, Table, Badge, Button, Input, PageLoader } from '@components'
+import { Card, Table, Badge, Button, Input, SkeletonTable } from '@components'
 import { useGetUsersQuery, useUpdateUserMutation, useDeleteUserMutation } from '@store/api'
 
 const statusVariant = { active: 'success', suspended: 'danger', pending: 'warning' }
@@ -80,7 +80,7 @@ export const UsersPage = () => {
 
       <Card className="overflow-hidden">
         {isLoading ? (
-          <PageLoader />
+          <SkeletonTable rows={6} />
         ) : (
           <Table>
             <Table.Header>
