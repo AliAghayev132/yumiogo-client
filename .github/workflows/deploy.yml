@@ -1,0 +1,155 @@
+name: Deploy Yumio Frontend
+
+on:
+  push:
+    branches:
+      - main
+
+# Eyni vaxtda yalnız 1 deploy qaçsın
+concurrency:
+  group: deploy-yumio-client
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SECRET_KEY }}
+          port: 2222
+          command_timeout: 8m
+          script: |
+            #!/bin/bash
+            set -euo pipefail
+
+            # ========================================
+            # 1. NVM mühitini yüklə
+            # ========================================
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" || {
+              echo "❌ nvm.sh tapılmadı: $NVM_DIR/nvm.sh"
+              exit 1
+            }
+
+            # ========================================
+            # 2. Node 20 versiyasını aktiv et
+            #    (Vite 8 minimum Node 20.19 tələb edir)
+            # ========================================
+            echo "🔄 Node 20 aktivləşdirilir..."
+            nvm use 20 || {
+              echo "⚠️ Node 20 tapılmadı, default Node istifadə olunur"
+              nvm use default
+            }
+
+            # ========================================
+            # 3. Versiyaları yoxla (npm + package-lock.json)
+            # ========================================
+            echo "🔎 Quraşdırılmış versiyalar:"
+            node -v || { echo "❌ node tapılmadı"; exit 1; }
+            npm -v  || { echo "❌ npm tapılmadı"; exit 1; }
+
+            # ========================================
+            # 4. Proyekt qovluğuna keç
+            # ========================================
+            CWD="/var/www/yumio/client"
+            DIST_DIR="$CWD/dist"
+            BACKUP_DIR="$CWD/dist_backup"
+            export NODE_ENV=production
+
+            echo "➡️ Proyekt qovluğuna keçilir: $CWD"
+            cd "$CWD" || { echo "❌ Qovluq tapılmadı: $CWD"; exit 1; }
+
+            # ========================================
+            # 5. Köhnə build-in backup-ını götür
+            # ========================================
+            if [ -d "$DIST_DIR" ]; then
+              echo "💾 Köhnə build backup edilir..."
+              rm -rf "$BACKUP_DIR"
+              cp -r "$DIST_DIR" "$BACKUP_DIR"
+            fi
+
+            # ========================================
+            # 6. Git repository-ni yenilə
+            # ========================================
+            echo "📥 Repository yenilənir..."
+            git fetch origin main --prune
+
+            PREV_COMMIT=$(git rev-parse --short HEAD)
+
+            if ! git merge --ff-only origin/main; then
+              echo "⚠️ Fast-forward merge mümkün olmadı, hard reset edilir..."
+              git reset --hard origin/main
+            fi
+
+            NEW_COMMIT=$(git rev-parse --short HEAD)
+            echo "✅ Repository yeniləndi: $PREV_COMMIT → $NEW_COMMIT"
+
+            # ========================================
+            # 7. Dependencies quraşdır
+            #    Vite/build devDependencies-dədir, ona görə --omit=dev OLMAZ.
+            #    NODE_ENV=production npm-i dev paketləri atlamağa məcbur edir,
+            #    ona görə burada söndürürük.
+            # ========================================
+            echo "📦 Dependencies quraşdırılır..."
+            NODE_ENV=development npm ci --legacy-peer-deps --no-audit --no-fund
+
+            # ========================================
+            # 8. Build et (uğursuz olarsa rollback)
+            #    VITE_API_URL təyin OLUNMUR: production build saytın öz origin-inə
+            #    (https://yumiogo.com/api) müraciət edir.
+            # ========================================
+            echo "🔨 Build edilir..."
+            if ! npm run build; then
+              echo "❌ Build uğursuz oldu! Rollback edilir..."
+              if [ -d "$BACKUP_DIR" ]; then
+                rm -rf "$DIST_DIR"
+                mv "$BACKUP_DIR" "$DIST_DIR"
+                echo "♻️ Köhnə build bərpa olundu"
+              fi
+              exit 1
+            fi
+
+            # ========================================
+            # 9. Build-in doğruluğunu yoxla
+            # ========================================
+            if [ ! -f "$DIST_DIR/index.html" ]; then
+              echo "❌ dist/index.html yaradılmadı! Rollback edilir..."
+              if [ -d "$BACKUP_DIR" ]; then
+                rm -rf "$DIST_DIR"
+                mv "$BACKUP_DIR" "$DIST_DIR"
+              fi
+              exit 1
+            fi
+
+            # dev URL production bundle-ına düşməyib?
+            if grep -rq "localhost:3042" "$DIST_DIR/assets" 2>/dev/null; then
+              echo "⚠️ DİQQƏT: bundle-da localhost URL-i var — VITE_API_URL boş olmalıdır"
+            fi
+
+            # Backup-ı təmizlə
+            rm -rf "$BACKUP_DIR"
+
+            # ========================================
+            # 10. Sayt canlıdır? (server dist/-i özü verir, restart lazım deyil)
+            # ========================================
+            echo "🏥 Sayt yoxlanılır..."
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3042/ || echo "000")
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Sayt cavab verir (HTTP $HTTP_CODE)"
+            else
+              echo "⚠️ Sayt HTTP $HTTP_CODE qaytardı — backend işləyirmi? (pm2 status yumio)"
+            fi
+
+            # ========================================
+            # 11. Uğurlu nəticə
+            # ========================================
+            echo ""
+            echo "✅ Deploy uğurla tamamlandı!"
+            echo "📊 Versiya: $PREV_COMMIT → $NEW_COMMIT"
+            echo "🕒 Tarix: $(date '+%Y-%m-%d %H:%M:%S')"
