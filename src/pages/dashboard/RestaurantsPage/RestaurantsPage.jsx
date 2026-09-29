@@ -1,165 +1,275 @@
-import { useState } from 'react'
-import { Search, Trash2, Star, Plus, Pencil } from 'lucide-react'
-import Swal from 'sweetalert2'
-import { Card, Table, Badge, Button, Input, SkeletonTable } from '@components'
-import { getImageUrl } from '@utils'
+import { useCallback, useMemo, useState } from 'react'
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router'
+import { Plus, Pencil, Trash2, Star, Store, SearchX } from 'lucide-react'
 import {
-  useGetAdminRestaurantsQuery,
-  useDeleteRestaurantMutation,
-  useGetMetaQuery,
-} from '@store/api'
-import { RestaurantFormModal } from './RestaurantFormModal'
+  TableCard,
+  Table,
+  Tabs,
+  FilterMenu,
+  Button,
+  ChipButton,
+  IconButton,
+  StatusPill,
+  useHeaderSearch,
+  useBanner,
+  errorMessage,
+  formatNumber,
+} from '@components'
+import { useGetAdminRestaurantsQuery, useExportRestaurantsMutation, useGetMetaQuery } from '@store/api'
+import { saveTextFile } from '@utils'
+import { AddRestaurantModal } from './AddRestaurantModal'
+import { useRestaurantActions } from './useRestaurantActions'
+import { RESTAURANT_STATUS_TABS, RESTAURANT_TABS, RESTAURANT_SORTS } from './restaurantMeta'
 
-const statusVariant = { active: 'success', pending: 'warning', closed: 'danger' }
+// Figma: "Showing 1–11 of 1,204".
+const PAGE_SIZE = 11
+const COLUMNS = 7
+const NO_FILTERS = { cuisine: '', city: '', sort: '' }
 
+// Page number that falls back to 1 whenever `key` (search / filters / tab) changes.
+const usePageFor = (key) => {
+  const [state, setState] = useState({ key, page: 1 })
+  const page = state.key === key ? state.page : 1
+  const setPage = useCallback((next) => setState({ key, page: next }), [key])
+  return [page, setPage]
+}
+
+// Figma row actions by status: active → edit + delete icons; pending → Approve · Reject chips;
+// suspended → Restore chip + delete. Rejected / legacy closed → Restore; Trash → Restore +
+// "Remove permanently" (hard delete).
+// Suspending a live restaurant is done from its page header (keeps the Figma row layout).
+const RowActions = ({ r, trash, actions, onEdit }) => {
+  if (trash) {
+    return (
+      <Table.Actions>
+        <ChipButton tone="success" onClick={() => actions.restore(r)}>
+          Restore
+        </ChipButton>
+        <IconButton icon={Trash2} label={`Remove ${r.name} permanently`} tone="danger" onClick={() => actions.purge(r)} />
+      </Table.Actions>
+    )
+  }
+  return (
+    <Table.Actions>
+      {r.status === 'pending' && (
+        <>
+          <ChipButton tone="success" onClick={() => actions.approve(r)}>
+            Approve
+          </ChipButton>
+          <ChipButton tone="danger" onClick={() => actions.reject(r)}>
+            Reject
+          </ChipButton>
+        </>
+      )}
+      {['suspended', 'rejected', 'closed'].includes(r.status) && (
+        <ChipButton tone="success" onClick={() => actions.restore(r)}>
+          Restore
+        </ChipButton>
+      )}
+      {r.status === 'active' && <IconButton icon={Pencil} label={`Edit ${r.name}`} onClick={onEdit} />}
+      {r.status !== 'pending' && (
+        <IconButton icon={Trash2} label={`Remove ${r.name}`} tone="danger" onClick={() => actions.remove(r)} />
+      )}
+    </Table.Actions>
+  )
+}
+
+/**
+ * Restaurants (Figma 1285:9619 / 1343:26926): "All restaurants" table card with Export / Filter /
+ * + Add restaurants, status tabs (incl. Trash) with counts, status-dependent row actions,
+ * numbered pagination and the header search. Links: ?status=pending, ?restaurant=<id> (opens
+ * the restaurant page).
+ */
 export const RestaurantsPage = () => {
-  const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
-  const [editing, setEditing] = useState(undefined) // undefined = closed, null = create, obj = edit
-  const { data, isLoading } = useGetAdminRestaurantsQuery({ search, page, limit: 10 })
-  const { data: metaData } = useGetMetaQuery()
-  const [deleteRestaurant] = useDeleteRestaurantMutation()
+  const navigate = useNavigate()
+  const [params, setParams] = useSearchParams()
+  const rawTab = params.get('status')
+  const tab = RESTAURANT_TABS.includes(rawTab) ? rawTab : 'all'
+  const trash = tab === 'trash'
+  const linked = params.get('restaurant')
 
-  const restaurants = data?.data?.restaurants || []
-  const pagination = data?.data?.pagination || {}
+  const search = useHeaderSearch({ placeholder: 'Search restaurants by name or address' })
+  const [filters, setFilters] = useState(NO_FILTERS)
+  const [page, setPage] = usePageFor(`${tab}|${search}|${JSON.stringify(filters)}`)
+  const [adding, setAdding] = useState(false)
+  const { data: metaData } = useGetMetaQuery()
   const meta = metaData?.data
 
-  const remove = async (r) => {
-    const res = await Swal.fire({
-      icon: 'warning',
-      title: 'Delete restaurant?',
-      text: `${r.name} will be removed.`,
-      showCancelButton: true,
-      confirmButtonText: 'Delete',
-      confirmButtonColor: '#EF4444',
+  const query = useMemo(() => {
+    const q = { search: search || undefined }
+    if (trash) q.deleted = true
+    else q.status = tab
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v) q[k] = v
     })
-    if (!res.isConfirmed) return
+    return q
+  }, [tab, trash, search, filters])
+
+  const { data, isLoading, isFetching, isError, refetch } = useGetAdminRestaurantsQuery({
+    ...query,
+    page,
+    limit: PAGE_SIZE,
+  })
+  // In the Trash view the list counts are the trash's; fetch the live counts for the tabs.
+  const { data: liveData } = useGetAdminRestaurantsQuery(
+    { search: query.search, cuisine: query.cuisine, city: query.city, limit: 1 },
+    { skip: !trash }
+  )
+  const [exportRestaurants, { isLoading: exporting }] = useExportRestaurantsMutation()
+  const actions = useRestaurantActions()
+  const banner = useBanner()
+
+  const restaurants = data?.data?.restaurants || []
+  const pagination = data?.data?.pagination || { total: 0 }
+  const counts = (trash ? liveData?.data?.counts : data?.data?.counts) || {}
+  const trashCount = data?.data?.counts?.deleted
+
+  const filterGroups = useMemo(
+    () => [
+      { key: 'cuisine', label: 'Category', options: meta?.cuisines || [] },
+      { key: 'city', label: 'Location', options: meta?.cities || [] },
+      { key: 'sort', label: 'Sort by', allLabel: 'Newest first', options: RESTAURANT_SORTS },
+    ],
+    [meta]
+  )
+
+  // Old links (?restaurant=<id>) open the restaurant page.
+  if (linked) return <Navigate to={`/dashboard/restaurants/${linked}`} replace />
+
+  const setTab = (value) =>
+    setParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (value === 'all') next.delete('status')
+      else next.set('status', value)
+      return next
+    })
+
+  const onExport = async () => {
     try {
-      await deleteRestaurant(r._id).unwrap()
+      const { csv, filename } = await exportRestaurants(query).unwrap()
+      saveTextFile(csv, filename)
     } catch (err) {
-      Swal.fire({ icon: 'error', text: err?.data?.message || 'Delete failed' })
+      banner.error(errorMessage(err, 'Export failed'))
     }
   }
 
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="relative w-full max-w-sm">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <Input
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value)
-              setPage(1)
-            }}
-            placeholder="Search restaurants..."
-            className="pl-9"
-          />
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-gray-500">{pagination.total ?? 0} restaurants</span>
-          <Button variant="success" onClick={() => setEditing(null)} leftIcon={<Plus className="w-4 h-4" />}>
-            Add restaurant
-          </Button>
-        </div>
-      </div>
+  const tabs = RESTAURANT_STATUS_TABS.filter((t) => !t.legacy || counts[t.value] > 0 || tab === t.value).map((t) => ({
+    value: t.value,
+    label: t.label,
+    count: t.value === 'trash' ? trashCount : counts[t.value],
+  }))
+  const filtered = !!search || Object.values(filters).some(Boolean) || tab !== 'all'
+  const open = (r, detailTab) => navigate(`/dashboard/restaurants/${r._id}${detailTab ? `?tab=${detailTab}` : ''}`)
 
-      <Card className="overflow-hidden">
-        {isLoading ? (
-          <SkeletonTable rows={6} />
-        ) : (
-          <Table>
-            <Table.Header>
-              <Table.Row hoverable={false}>
-                <Table.Head>Restaurant</Table.Head>
-                <Table.Head>Cuisines</Table.Head>
-                <Table.Head>Price</Table.Head>
-                <Table.Head>Rating</Table.Head>
-                <Table.Head>Status</Table.Head>
-                <Table.Head align="right">Actions</Table.Head>
-              </Table.Row>
-            </Table.Header>
-            <Table.Body>
-              {restaurants.map((r) => (
+  return (
+    <div className="flex flex-col gap-6">
+      <TableCard
+        title={trash ? 'Removed restaurants' : 'All restaurants'}
+        actions={
+          <>
+            <Button size="sm" variant="outline" onClick={onExport} loading={exporting}>
+              Export
+            </Button>
+            <FilterMenu filters={filterGroups} value={filters} onChange={setFilters} />
+            <Button size="sm" leftIcon={Plus} onClick={() => setAdding(true)}>
+              Add restaurants
+            </Button>
+          </>
+        }
+        toolbar={
+          <Tabs
+            variant="pill"
+            items={tabs}
+            value={tab}
+            onChange={setTab}
+            aria-label="Restaurant status"
+            className="max-w-full overflow-x-auto"
+          />
+        }
+        pagination={{ page, total: pagination.total || 0, limit: PAGE_SIZE, onPageChange: setPage }}
+      >
+        <Table minWidth={960}>
+          <Table.Header>
+            <Table.Row>
+              <Table.Head>Restaurant</Table.Head>
+              <Table.Head>Category</Table.Head>
+              <Table.Head>Location</Table.Head>
+              <Table.Head>Rating</Table.Head>
+              <Table.Head>Reviews</Table.Head>
+              <Table.Head>Status</Table.Head>
+              <Table.Head>Actions</Table.Head>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body className={isFetching && !isLoading ? 'opacity-60 transition-opacity' : undefined}>
+            {isLoading ? (
+              <Table.Loading rows={PAGE_SIZE} cols={COLUMNS} avatar={false} />
+            ) : isError ? (
+              <Table.Empty
+                colSpan={COLUMNS}
+                title="Could not load restaurants"
+                description="Check your connection and try again."
+                action={
+                  <Button size="sm" variant="outline" onClick={refetch}>
+                    Retry
+                  </Button>
+                }
+              />
+            ) : restaurants.length ? (
+              restaurants.map((r) => (
                 <Table.Row key={r._id}>
-                  <Table.Cell>
-                    <div className="flex items-center gap-3">
-                      {r.coverImages?.[0] ? (
-                        <img src={getImageUrl(r.coverImages[0])} alt="" className="w-10 h-10 rounded-lg object-cover" />
-                      ) : (
-                        <div className="w-10 h-10 rounded-lg bg-gray-100" />
-                      )}
-                      <div>
-                        <p className="font-medium">{r.name}</p>
-                        <p className="text-xs text-gray-400">{r.city}</p>
-                      </div>
-                    </div>
+                  <Table.Cell className="max-w-[260px]">
+                    <Link to={`/dashboard/restaurants/${r._id}`} className="block truncate hover:text-brand-hover" title={r.address || r.name}>
+                      {r.name}
+                    </Link>
                   </Table.Cell>
-                  <Table.Cell className="text-gray-500">{(r.cuisines || []).slice(0, 2).join(', ')}</Table.Cell>
-                  <Table.Cell>{r.priceLevel}</Table.Cell>
-                  <Table.Cell>
-                    <span className="inline-flex items-center gap-1">
-                      <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400" />
-                      {r.rating?.toFixed(1)} <span className="text-gray-400">({r.reviewCount})</span>
+                  <Table.Cell nowrap>{r.cuisines?.[0] || <span className="text-ink-disabled">—</span>}</Table.Cell>
+                  <Table.Cell nowrap title={r.address || undefined}>
+                    {r.city || <span className="text-ink-disabled">—</span>}
+                  </Table.Cell>
+                  <Table.Cell nowrap>
+                    <span className="inline-flex items-center gap-2">
+                      <Star className="h-4 w-4 fill-star text-star" />
+                      {r.reviewCount ? Number(r.rating || 0).toFixed(1) : '—'}
                     </span>
                   </Table.Cell>
+                  <Table.Cell>{formatNumber(r.reviewCount ?? 0)}</Table.Cell>
+                  <Table.Cell nowrap>
+                    {trash ? <StatusPill status="deleted" label="Removed" /> : <StatusPill status={r.status} entity="restaurant" />}
+                    {r.temporarilyClosed && r.status === 'active' && !trash && (
+                      <p className="mt-1 text-[10px] font-medium text-ink-muted">Temporarily closed</p>
+                    )}
+                  </Table.Cell>
                   <Table.Cell>
-                    <Badge variant={statusVariant[r.status] || 'default'}>{r.status}</Badge>
-                  </Table.Cell>
-                  <Table.Cell align="right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setEditing(r)}
-                        className="text-gray-600 hover:bg-gray-100"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => remove(r)}
-                        className="text-red-600 hover:bg-red-50"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
+                    <RowActions r={r} trash={trash} actions={actions} onEdit={() => open(r, 'general')} />
                   </Table.Cell>
                 </Table.Row>
-              ))}
-              {!restaurants.length && (
-                <Table.Row hoverable={false}>
-                  <Table.Cell className="text-center text-gray-400 py-8">No restaurants found.</Table.Cell>
-                </Table.Row>
-              )}
-            </Table.Body>
-          </Table>
-        )}
-      </Card>
+              ))
+            ) : (
+              <Table.Empty
+                colSpan={COLUMNS}
+                icon={filtered ? SearchX : Store}
+                title={
+                  trash
+                    ? 'Trash is empty'
+                    : filtered
+                      ? 'No restaurants match these filters'
+                      : 'No restaurants yet'
+                }
+                description={search ? `Nothing found for “${search}”.` : undefined}
+                action={
+                  !filtered && (
+                    <Button size="sm" leftIcon={Plus} onClick={() => setAdding(true)}>
+                      Add restaurants
+                    </Button>
+                  )
+                }
+              />
+            )}
+          </Table.Body>
+        </Table>
+      </TableCard>
 
-      {pagination.pages > 1 && (
-        <div className="flex items-center justify-end gap-2">
-          <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-            Prev
-          </Button>
-          <span className="text-sm text-gray-500">
-            Page {pagination.page} / {pagination.pages}
-          </span>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={page >= pagination.pages}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            Next
-          </Button>
-        </div>
-      )}
-
-      {editing !== undefined && (
-        <RestaurantFormModal restaurant={editing} meta={meta} onClose={() => setEditing(undefined)} />
-      )}
+      <AddRestaurantModal isOpen={adding} onClose={() => setAdding(false)} />
     </div>
   )
 }

@@ -1,41 +1,28 @@
 # store/api/
 
-## Məqsəd
+`baseApi.js` creates the only RTK Query instance: base URL from `@utils/apiOrigin`, the access
+token in `Authorization`, and the reauth wrapper — one refresh at a time (the server rotates
+refresh tokens, so a replayed one would sign the account out everywhere), tokens shared between
+browser tabs through `localStorage`, sign-out only when the server rejects the refresh. A 403 from
+an `/admin` endpoint invalidates the `Auth` tag so the shell re-checks the session.
 
-Bu qovluq bütün RTK Query API təbəqəsini saxlayır. `baseApi.js` yeganə `createApi` instansı yaradır: `fetchBaseQuery` ilə base URL, token-in `prepareHeaders`-də əlavə olunması və 401 zamanı refresh token ilə avtomatik reauth burada qurulur. Feature faylları (`authApi.js`, `postApi.js`) heç bir yeni api yaratmır — onlar `baseApi.injectEndpoints` vasitəsilə öz endpoint-lərini eyni instansa "inject" edir. `index.js` isə barrel-dir və hamısını bir yerdən ixrac edir.
+Feature files inject endpoints into it and export their hooks; `index.js` re-exports everything
+(`import { useGetUsersQuery } from '@store/api'`):
 
-## Adlandırma / yazılış konvensiyası
+| File | Area |
+|---|---|
+| `authApi.js` | login, logout (device scope), `/auth/me` (unwrapped to the user), profile, avatar, change / forgot / reset password, `/auth/config` |
+| `adminStatsApi.js` | dashboard stats, analytics |
+| `adminUsersApi.js` | users list/detail/create, warn, ban, suspend, restore, approve, verify, role, delete, CSV |
+| `adminRestaurantsApi.js` | restaurants list/detail, create/update, moderation, trash + permanent delete, CSV, place lookup |
+| `adminMenuApi.js` | menu categories, dishes, menu photos |
+| `adminReviewsApi.js` | review moderation, comments, recalculation, review labels + label requests |
+| `adminReportsApi.js` | reports queue, resolve / dismiss / delete, CSV |
+| `adminSettingsApi.js` | Settings, demo data, broadcast |
+| `adminApi.js` | `/admin/meta` (form option lists) and image uploads |
+| `catalogApi.js` | Catalog + Content admin CRUD, and the public catalog / FAQs / stats / legal pages / showcase restaurants |
+| `csvRequest.js` | helpers for the CSV export endpoints |
+| `postApi.js` | template leftover (the server's `/api/posts` is gone, no page uses it) — to be deleted together with `pages/dashboard/PostsPage` |
 
-- Yeganə base instans `baseApi` adlanır və yalnız `baseApi.js`-də mövcuddur.
-- Hər resurs üçün fayl `<entity>Api.js` (camelCase) adlanır və `baseApi.injectEndpoints({ endpoints: (builder) => ({ ... }) })` istifadə edir.
-- Endpoint-lər `builder.query` / `builder.mutation` ilə təyin olunur; cache üçün `providesTags` / `invalidatesTags` (`tagTypes`: `User`, `Post`, `Auth`) istifadə edilir.
-- Fayl sonunda avtomatik yaranan hook-lar (`use<Endpoint>Query` / `use<Endpoint>Mutation`) ixrac olunur.
-
-## Nümunə
-
-`postApi.js` faylından:
-
-```js
-import { baseApi } from './baseApi'
-
-export const postApi = baseApi.injectEndpoints({
-  endpoints: (builder) => ({
-    getPosts: builder.query({
-      query: (params = {}) => ({ url: '/posts', params }),
-      providesTags: [{ type: 'Post', id: 'LIST' }],
-    }),
-  }),
-})
-
-export const { useGetPostsQuery } = postApi
-```
-
-Komponentdə barrel və `@store` alias-ı ilə: `import { useGetPostsQuery } from '@store/api'`.
-
-## Yeni fayl necə əlavə olunur
-
-1. `postApi.js`-i şablon kimi kopyala, `<entity>Api.js` adlandır.
-2. `import { baseApi } from './baseApi'` və `baseApi.injectEndpoints(...)` yaz.
-3. Yeni tag lazımdırsa, `baseApi.js`-dəki `tagTypes` massivinə əlavə et.
-4. Fayl sonunda hook-ları ixrac et.
-5. `index.js` barrel-inə `export * from './<entity>Api'` sətrini əlavə et.
+Tags (`baseApi.tagTypes`) drive cache refreshes; list endpoints provide `{ type, id: 'LIST' }`
+and mutations invalidate what they change (and `AdminStats` for the counters).

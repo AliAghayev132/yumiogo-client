@@ -7,11 +7,11 @@ import { Navigate, useLocation } from 'react-router'
 /**
  * Route guard.
  *
- * - Redirects unauthenticated users to the login page.
- * - Optionally restricts access to a set of roles via `allowedRoles`.
- *
- * NOTE: If your app needs a "pending account" flow, add a status check here,
- * e.g. redirect users whose `status === 'pending'` to an onboarding page.
+ * - Sends signed-out visitors to the login page (and back to where they were afterwards).
+ * - `allowedRoles` restricts the routes to those roles. A session with another role (e.g. an
+ *   admin who was demoted) goes to the login page with the "No admin access" notice, which
+ *   also drops that session.
+ * The role is re-checked against GET /auth/me by the dashboard shell (useSessionCheck).
  */
 export const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   const { isAuthenticated, role } = useSelector((state) => state.auth)
@@ -22,7 +22,7 @@ export const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   }
 
   if (allowedRoles.length > 0 && !allowedRoles.includes(role)) {
-    return <Navigate to="/" replace />
+    return <Navigate to="/login" state={{ notice: 'not-admin' }} replace />
   }
 
   return children

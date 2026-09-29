@@ -1,143 +1,159 @@
-import { Users, Store, Star, Flag, Clock, UserPlus } from 'lucide-react'
-import { StatCard, Card, SkeletonStats, Skeleton } from '@components'
+import { useState } from 'react'
+import { Link, useNavigate } from 'react-router'
+import { Users, Store, MessageSquareMore, CircleAlert, Bookmark, Activity } from 'lucide-react'
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
+import {
+  StatCard,
+  ChartCard,
+  IconTile,
+  Banner,
+  Skeleton,
+  chartAxisProps,
+  chartGridProps,
+  chartTooltipProps,
+  chartColors,
+  timeAgo,
+  formatNumber,
+} from '@components'
 import { useGetStatsQuery, useGetAnalyticsQuery } from '@store/api'
+import { RatingDonut } from './RatingDonut'
 
-const timeAgo = (iso) => {
-  const diff = (Date.now() - new Date(iso).getTime()) / 1000
-  if (diff < 60) return 'just now'
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-  return `${Math.floor(diff / 86400)}d ago`
+const PERIODS = ['7d', '30d', '90d']
+
+// Recent-activity row icon per item type (Figma: green people_alt for users, purple reviews).
+const ACTIVITY_ICONS = {
+  user: { icon: Users, tone: 'green' },
+  review: { icon: MessageSquareMore, tone: 'purple' },
+  report: { icon: CircleAlert, tone: 'red' },
+  restaurant: { icon: Store, tone: 'orange' },
+  list: { icon: Bookmark, tone: 'pink' },
 }
 
+const ActivityRow = ({ item }) => {
+  const meta = ACTIVITY_ICONS[item.type] || { icon: Activity, tone: 'neutral' }
+  const content = (
+    <>
+      <IconTile icon={meta.icon} tone={meta.tone} />
+      <p className="min-w-0 flex-1 truncate text-sm font-semibold leading-[18px]">
+        <span className="text-ink">{item.title}</span> <span className="text-ink-muted">{item.detail}</span>
+      </p>
+      <span className="shrink-0 text-sm leading-[18px] text-ink-disabled">{timeAgo(item.at)}</span>
+    </>
+  )
+  const row = 'flex items-center gap-3 rounded-lg px-6 py-2.5'
+  return item.link ? (
+    <Link to={item.link} className={`${row} transition-colors hover:bg-canvas`}>
+      {content}
+    </Link>
+  ) : (
+    <div className={row}>{content}</div>
+  )
+}
+
+/**
+ * Dashboard (Figma 1263:21808): 4 stat cards with trends (period = the chart tabs), New users
+ * chart with 7d / 30d / 90d tabs, Reviews by rating donut, Recent activity with links to the
+ * moderation pages.
+ */
 export const DashboardPage = () => {
-  const { data, isLoading } = useGetStatsQuery()
-  const { data: analyticsData } = useGetAnalyticsQuery()
+  const navigate = useNavigate()
+  const [period, setPeriod] = useState('7d')
+  const days = parseInt(period, 10)
 
-  if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <SkeletonStats />
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card className="lg:col-span-2 p-6">
-            <Skeleton className="h-4 w-32" />
-            <Skeleton className="h-40 w-full mt-6" />
-          </Card>
-          <Card className="p-6">
-            <Skeleton className="h-4 w-40" />
-            <Skeleton className="h-32 w-full mt-6" />
-          </Card>
-        </div>
-      </div>
-    )
-  }
+  // The sidebar polls the default (7 days) entry — share it.
+  const stats = useGetStatsQuery(days === 7 ? undefined : { days })
+  const analytics = useGetAnalyticsQuery({ range: period }, { refetchOnMountOrArgChange: 60 })
 
-  const stats = data?.data?.stats || {}
-  const activity = data?.data?.activity || []
-  const usersByDay = analyticsData?.data?.usersByDay || []
-  const sentiment = analyticsData?.data?.reviewsBySentiment || { liked: 0, fine: 0, disliked: 0 }
-
-  const maxDay = Math.max(1, ...usersByDay.map((d) => d.count))
-  const sentTotal = Math.max(1, sentiment.liked + sentiment.fine + sentiment.disliked)
+  const s = stats.data?.data?.stats || {}
+  const activity = stats.data?.data?.activity || []
+  const a = analytics.data?.data || {}
+  const series = a.series || []
+  const statsLoading = stats.isLoading || (stats.isFetching && !stats.data)
 
   const cards = [
-    {
-      title: 'Total Users',
-      value: stats.totalUsers ?? 0,
-      change: `${stats.usersChange >= 0 ? '+' : ''}${stats.usersChange ?? 0}% this week`,
-      changeType: stats.usersChange >= 0 ? 'positive' : 'negative',
-      icon: <Users className="w-5 h-5" />,
-    },
-    { title: 'Restaurants', value: stats.totalRestaurants ?? 0, icon: <Store className="w-5 h-5" /> },
-    {
-      title: 'Reviews',
-      value: stats.totalReviews ?? 0,
-      change: `${stats.reviewsChange >= 0 ? '+' : ''}${stats.reviewsChange ?? 0}% this week`,
-      changeType: stats.reviewsChange >= 0 ? 'positive' : 'negative',
-      icon: <Star className="w-5 h-5" />,
-    },
-    { title: 'Open Reports', value: stats.openReports ?? 0, icon: <Flag className="w-5 h-5" /> },
+    { key: 'users', icon: Users, tone: 'blue', value: s.totalUsers, label: 'Total users', trend: s.usersChange, to: '/dashboard/users' },
+    { key: 'restaurants', icon: Store, tone: 'orange', value: s.totalRestaurants, label: 'Restaurants', trend: s.restaurantsChange, to: '/dashboard/restaurants' },
+    { key: 'reviews', icon: MessageSquareMore, tone: 'purple', value: s.totalReviews, label: 'Total reviews', trend: s.reviewsChange, to: '/dashboard/reviews' },
+    { key: 'reports', icon: CircleAlert, tone: 'red', value: s.openReports, label: 'Pending reports', trend: s.reportsChange, invertTrend: true, to: '/dashboard/reports' },
   ]
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        {cards.map((c) => (
-          <StatCard key={c.title} {...c} />
+    <div className="flex flex-col gap-6">
+      {stats.isError && (
+        <Banner tone="error" action={{ label: 'Retry', onClick: stats.refetch }}>
+          Could not load the dashboard numbers.
+        </Banner>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
+        {cards.map(({ key, to, ...card }) => (
+          <StatCard key={key} {...card} value={card.value ?? 0} loading={statsLoading} onClick={() => navigate(to)} />
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2 p-6">
-          <div className="mb-4">
-            <h3 className="font-bold text-gray-900">New users</h3>
-            <p className="text-sm text-gray-400">Last 7 days</p>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,684fr)_minmax(0,448fr)]">
+        <ChartCard
+          title="New users"
+          subtitle={a.range?.label || `Last ${days} days`}
+          periods={PERIODS}
+          period={period}
+          onPeriodChange={setPeriod}
+          loading={analytics.isLoading}
+          empty={analytics.isError && { title: 'Could not load the chart', description: 'Try again in a moment.' }}
+        >
+          <div className="h-[200px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={series} margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
+                <CartesianGrid {...chartGridProps} />
+                <XAxis dataKey="label" {...chartAxisProps} interval="preserveStartEnd" minTickGap={12} />
+                <YAxis hide allowDecimals={false} />
+                <Tooltip {...chartTooltipProps} formatter={(v) => [formatNumber(v), 'New users']} />
+                <Bar dataKey="users" name="New users" fill={chartColors.users} radius={[6, 6, 0, 0]} maxBarSize={40} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
-          <div className="flex items-end justify-between gap-2 h-40">
-            {usersByDay.map((d) => (
-              <div key={d.date} className="flex-1 flex flex-col items-center gap-2">
-                <div className="w-full flex items-end justify-center h-32">
-                  <div
-                    className="w-full max-w-9 bg-green-500 rounded-t-md transition-all"
-                    style={{ height: `${(d.count / maxDay) * 100}%`, minHeight: d.count ? 6 : 2 }}
-                    title={`${d.count} users`}
-                  />
-                </div>
-                <span className="text-[10px] text-gray-400">
-                  {new Date(d.date).toLocaleDateString(undefined, { weekday: 'short' })}
-                </span>
+        </ChartCard>
+
+        <ChartCard
+          title="Reviews by rating"
+          subtitle="All time"
+          loading={analytics.isLoading}
+          empty={
+            analytics.isError
+              ? { title: 'Could not load the chart' }
+              : !analytics.isLoading && !a.totalReviews && { title: 'No reviews yet' }
+          }
+          bodyClassName="flex items-center"
+        >
+          <RatingDonut buckets={a.ratingDistribution} average={a.averageScore} />
+        </ChartCard>
+      </div>
+
+      <ChartCard
+        title="Recent activity"
+        divider
+        className="pb-4"
+        bodyClassName="-mx-[18px] px-2"
+        empty={!statsLoading && !stats.isError && !activity.length && { title: 'No activity yet' }}
+        height={120}
+      >
+        {statsLoading ? (
+          <div className="flex flex-col gap-3 px-6">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <Skeleton className="h-10 w-10 rounded-lg" />
+                <Skeleton className="h-3.5 w-1/2" />
               </div>
             ))}
           </div>
-        </Card>
-
-        <Card className="p-6">
-          <h3 className="font-bold text-gray-900 mb-1">Reviews by sentiment</h3>
-          <p className="text-sm text-gray-400 mb-4">All time</p>
-          {[
-            { key: 'liked', label: '😊 Liked it', color: 'bg-green-500' },
-            { key: 'fine', label: '🙂 It was fine', color: 'bg-yellow-400' },
-            { key: 'disliked', label: '☹️ Didn’t like it', color: 'bg-red-500' },
-          ].map((s) => (
-            <div key={s.key} className="mb-3">
-              <div className="flex justify-between text-sm mb-1">
-                <span className="text-gray-600">{s.label}</span>
-                <span className="text-gray-900 font-medium">{sentiment[s.key]}</span>
-              </div>
-              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className={`h-full ${s.color} rounded-full`}
-                  style={{ width: `${(sentiment[s.key] / sentTotal) * 100}%` }}
-                />
-              </div>
-            </div>
-          ))}
-        </Card>
-      </div>
-
-      <Card className="p-6">
-        <h3 className="font-bold text-gray-900 mb-4">Recent activity</h3>
-        <div className="space-y-3">
-          {activity.map((a, i) => (
-            <div key={i} className="flex items-center gap-3">
-              <div
-                className={`w-9 h-9 rounded-lg flex items-center justify-center ${
-                  a.type === 'user' ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'
-                }`}
-              >
-                {a.type === 'user' ? <UserPlus className="w-4 h-4" /> : <Star className="w-4 h-4" />}
-              </div>
-              <p className="flex-1 min-w-0 text-sm text-gray-900">
-                <span className="font-semibold">{a.title}</span> {a.detail}
-              </p>
-              <span className="text-xs text-gray-400 flex items-center gap-1">
-                <Clock className="w-3 h-3" /> {timeAgo(a.at)}
-              </span>
-            </div>
-          ))}
-          {!activity.length && <p className="text-sm text-gray-400">No recent activity.</p>}
-        </div>
-      </Card>
+        ) : (
+          <div className="flex flex-col">
+            {activity.map((item) => (
+              <ActivityRow key={`${item.type}-${item.id}`} item={item} />
+            ))}
+          </div>
+        )}
+      </ChartCard>
     </div>
   )
 }

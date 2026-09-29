@@ -23,7 +23,7 @@ export const PageLoader = ({ message }) => {
         {dots.map((i) => (
           <motion.div
             key={i}
-            className="w-2.5 h-2.5 rounded-full bg-green-600"
+            className="h-2.5 w-2.5 rounded-full bg-brand"
             animate={{
               scale: [1, 1.4, 1],
               opacity: [0.3, 1, 0.3],
@@ -40,7 +40,7 @@ export const PageLoader = ({ message }) => {
 
       {/* Message */}
       <motion.p
-        className="text-sm text-gray-400 font-medium"
+        className="text-sm font-medium text-ink-muted"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.3 }}

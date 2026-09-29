@@ -1,2 +1,5 @@
+export * from './apiOrigin'
 export * from './formatDate'
 export * from './imageHandle'
+export * from './color'
+export * from './download'

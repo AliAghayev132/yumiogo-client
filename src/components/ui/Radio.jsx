@@ -25,17 +25,17 @@ export const Radio = ({
         checked={checked}
         onChange={onChange}
         disabled={disabled}
-        className="w-4 h-4 border-gray-300 text-green-600 focus:ring-green-500 focus:ring-offset-0"
+        className="h-4 w-4 shrink-0 border-line accent-brand focus-visible:outline-2 focus-visible:outline-brand/40"
         {...props}
       />
-      {label && <span className="text-sm text-gray-700">{label}</span>}
+      {label && <span className="text-sm text-ink">{label}</span>}
     </label>
   )
 }
 
 const RadioGroup = ({ children, label, className }) => (
   <div className={className}>
-    {label && <p className="text-sm font-medium text-gray-700 mb-2">{label}</p>}
+    {label && <p className="mb-2 text-sm leading-[18px] text-ink-tertiary">{label}</p>}
     <div className="space-y-2">{children}</div>
   </div>
 )

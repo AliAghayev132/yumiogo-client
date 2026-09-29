@@ -21,10 +21,10 @@ export const Checkbox = ({
         checked={checked}
         onChange={onChange}
         disabled={disabled}
-        className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500 focus:ring-offset-0"
+        className="h-4 w-4 shrink-0 rounded border-line accent-brand focus-visible:outline-2 focus-visible:outline-brand/40"
         {...props}
       />
-      {label && <span className="text-sm text-gray-700">{label}</span>}
+      {label && <span className="text-sm text-ink">{label}</span>}
     </label>
   )
 }

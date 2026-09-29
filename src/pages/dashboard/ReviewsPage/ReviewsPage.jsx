@@ -1,134 +1,293 @@
-import { useState } from 'react'
-import { Trash2 } from 'lucide-react'
-import Swal from 'sweetalert2'
-import { Card, Table, Badge, Button, SkeletonTable } from '@components'
-import { useGetAdminReviewsQuery, useDeleteReviewMutation } from '@store/api'
+import { useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router'
+import { Image as ImageIcon, MoreVertical, Plus, RotateCcw, Star, Tags, Trash2, Lightbulb } from 'lucide-react'
+import {
+  Badge,
+  Button,
+  ChipButton,
+  DropdownMenu,
+  FilterMenu,
+  IconButton,
+  StatusPill,
+  Table,
+  TableCard,
+  Tabs,
+  UserCell,
+  useBanner,
+  useHeaderSearch,
+  errorMessage,
+} from '@components'
+import {
+  useGetModerationReviewsQuery,
+  useExportModerationReviewsMutation,
+  useGetAdminSettingsQuery,
+  useGetLabelRequestsQuery,
+} from '@store/api'
+import { mergeSentiments } from '@store/hooks'
+import { saveTextFile } from '@utils'
+import { AddRestaurantModal } from '../RestaurantsPage/AddRestaurantModal'
+import { DATE_OPTIONS, SORT_OPTIONS, STATUS_TABS, STATUS_VALUES, reviewQueryParams } from './reviewFilters'
+import { RestaurantFilter } from './RestaurantFilter'
+import { ReviewDetailModal } from './ReviewDetailModal'
+import { useReviewActions } from './useReviewActions'
 
-const sentimentMeta = {
-  liked: { label: '😊 Liked it', variant: 'success' },
-  fine: { label: '🙂 It was fine', variant: 'warning' },
-  disliked: { label: '☹️ Didn’t like it', variant: 'danger' },
+const PAGE_SIZE = 10
+const COLS = 6
+
+const EMPTY_TITLES = {
+  all: 'No reviews yet',
+  pending: 'No reviews waiting for approval',
+  flagged: 'No flagged reviews',
+  approved: 'No approved reviews',
+  rejected: 'No rejected reviews',
 }
 
+/**
+ * Reviews (Figma 1291:11978): "Review moderation" table card — status tabs with counts,
+ * Filter (sentiment / date / sort) + restaurant filter, header search (text, author,
+ * restaurant or "#123"), CSV export, Approve / Delete row actions (Figma modalBoxes and
+ * snackbars) and the review detail (?review=<id>) with flag / reject / comments / reports.
+ * Honours the bell links ?status=<status> and ?review=<id>.
+ */
 export const ReviewsPage = () => {
-  const [sentiment, setSentiment] = useState('')
-  const [page, setPage] = useState(1)
-  const { data, isLoading } = useGetAdminReviewsQuery({ sentiment, page, limit: 10 })
-  const [deleteReview] = useDeleteReviewMutation()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const banner = useBanner()
+  const actions = useReviewActions()
+  const search = useHeaderSearch({ placeholder: 'Search reviews or #number' })
 
+  const statusParam = searchParams.get('status')
+  const status = STATUS_VALUES.includes(statusParam) ? statusParam : 'all'
+  const openReviewId = searchParams.get('review')
+  const restaurantParam = searchParams.get('restaurant')
+
+  const [filters, setFilters] = useState({ sentiment: '', date: '', sort: '' })
+  // Figma card header "+ Add restaurants" (same modal as the Restaurants page).
+  const [addingRestaurant, setAddingRestaurant] = useState(false)
+  const [restaurant, setRestaurant] = useState(() => (restaurantParam ? { _id: restaurantParam, name: '' } : null))
+
+  const params = reviewQueryParams({ status, search, filters, restaurant })
+  // Any filter change starts again from page 1 (no effect needed: the page is keyed to the filters).
+  const filterKey = JSON.stringify(params)
+  const [paging, setPaging] = useState({ key: filterKey, page: 1 })
+  const page = paging.key === filterKey ? paging.page : 1
+  const setPage = (p) => setPaging({ key: filterKey, page: p })
+
+  const { data, isLoading, isFetching, isError, refetch } = useGetModerationReviewsQuery({
+    ...params,
+    page,
+    limit: PAGE_SIZE,
+  })
+  const { data: settingsData } = useGetAdminSettingsQuery()
+  const { data: requestsData } = useGetLabelRequestsQuery({ status: 'pending', limit: 1 })
+  const [exportReviews, { isLoading: exporting }] = useExportModerationReviewsMutation()
+
+  const sentiments = useMemo(() => mergeSentiments(settingsData?.data?.settings?.sentiments), [settingsData])
+  const sentimentByKey = Object.fromEntries(sentiments.map((s) => [s.key, s]))
   const reviews = data?.data?.reviews || []
-  const pagination = data?.data?.pagination || {}
+  const counts = data?.data?.counts || {}
+  const total = data?.data?.pagination?.total || 0
+  const pendingRequests = requestsData?.data?.counts?.pending || 0
+  const hasFilters = !!(search || restaurant || Object.values(filters).some(Boolean))
 
-  const remove = async (rv) => {
-    const res = await Swal.fire({
-      icon: 'warning',
-      title: 'Remove review?',
-      text: 'This review will be hidden from the app.',
-      showCancelButton: true,
-      confirmButtonText: 'Remove',
-      confirmButtonColor: '#EF4444',
-    })
-    if (!res.isConfirmed) return
+  // A ?restaurant=<id> link only carries the id: take the name from the loaded rows.
+  const restaurantLabel =
+    restaurant && !restaurant.name
+      ? { ...restaurant, name: reviews.find((r) => r.restaurant?._id === restaurant._id)?.restaurant?.name || 'Selected restaurant' }
+      : restaurant
+
+  // Opening / closing the detail is a history entry; filter changes replace the current one.
+  const updateParams = (patch, { push = false } = {}) => {
+    const next = new URLSearchParams(searchParams)
+    Object.entries(patch).forEach(([name, value]) => (value ? next.set(name, value) : next.delete(name)))
+    setSearchParams(next, { replace: !push })
+  }
+
+  const setStatus = (value) => updateParams({ status: value === 'all' ? '' : value })
+  const openReview = (review) => updateParams({ review: review._id }, { push: true })
+  const closeReview = () => updateParams({ review: '' }, { push: true })
+  const changeRestaurant = (value) => {
+    setRestaurant(value)
+    updateParams({ restaurant: value?._id || '' })
+  }
+
+  const exportCsv = async () => {
     try {
-      await deleteReview(rv._id).unwrap()
+      const { csv, filename } = await exportReviews(params).unwrap()
+      saveTextFile(csv, filename)
     } catch (err) {
-      Swal.fire({ icon: 'error', text: err?.data?.message || 'Failed' })
+      banner.error(errorMessage(err, 'Export failed'))
     }
   }
 
-  const filters = ['', 'liked', 'fine', 'disliked']
+  const filterGroups = [
+    {
+      key: 'sentiment',
+      label: 'Sentiment',
+      options: sentiments.map((s) => ({ value: s.key, label: `${s.emoji} ${s.label}` })),
+    },
+    { key: 'date', label: 'Date', allLabel: 'Any time', options: DATE_OPTIONS },
+    { key: 'sort', label: 'Sort', allLabel: 'Newest first', options: SORT_OPTIONS },
+  ]
+
+  const moreItems = [
+    { label: 'Recalculate all ratings', icon: RotateCcw, onSelect: () => actions.recalculate() },
+    { divider: true },
+    { label: 'Review labels', icon: Tags, onSelect: () => navigate('/dashboard/catalog/reviewLabel') },
+    {
+      label: pendingRequests ? `Label requests (${pendingRequests})` : 'Label requests',
+      icon: Lightbulb,
+      onSelect: () => navigate('/dashboard/catalog/reviewLabel?tab=requests'),
+    },
+  ]
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex gap-2">
-          {filters.map((f) => (
-            <button
-              key={f || 'all'}
-              onClick={() => {
-                setSentiment(f)
-                setPage(1)
-              }}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                sentiment === f ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {f ? sentimentMeta[f].label : 'All'}
-            </button>
-          ))}
-        </div>
-        <span className="text-sm text-gray-500">{pagination.total ?? 0} reviews</span>
-      </div>
+    <>
+      <TableCard
+        title="Review moderation"
+        actions={
+          <>
+            <Button size="sm" variant="outline" loading={exporting} onClick={exportCsv}>
+              Export
+            </Button>
+            <FilterMenu filters={filterGroups} value={filters} onChange={setFilters} />
+            <Button size="sm" leftIcon={Plus} onClick={() => setAddingRestaurant(true)}>
+              Add restaurants
+            </Button>
+            <DropdownMenu
+              trigger={<IconButton icon={MoreVertical} label="More review tools" />}
+              items={moreItems}
+              width={240}
+            />
+          </>
+        }
+        toolbar={
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="max-w-full overflow-x-auto scrollbar-thin">
+              <Tabs
+                variant="pill"
+                value={status}
+                onChange={setStatus}
+                aria-label="Review status"
+                items={STATUS_TABS.map((t) => ({ ...t, count: counts[t.value] ?? undefined }))}
+              />
+            </div>
+            <RestaurantFilter value={restaurantLabel} onChange={changeRestaurant} />
+          </div>
+        }
+        pagination={{ page, total, limit: PAGE_SIZE, onPageChange: setPage }}
+      >
+        <Table minWidth={960} className={isFetching && !isLoading ? 'opacity-60 transition-opacity' : undefined}>
+          <Table.Header>
+            <Table.Row>
+              <Table.Head width={224}>User</Table.Head>
+              <Table.Head width={200}>Restaurant</Table.Head>
+              <Table.Head width={112}>Rating</Table.Head>
+              <Table.Head>Reviews</Table.Head>
+              <Table.Head width={164}>Status</Table.Head>
+              {/* Figma: the Actions label sits at the column start, the buttons are right-aligned. */}
+              <Table.Head width={150}>Actions</Table.Head>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
+            {isLoading ? (
+              <Table.Loading rows={6} cols={COLS} />
+            ) : isError ? (
+              <Table.Empty
+                colSpan={COLS}
+                title="Could not load reviews"
+                action={
+                  <Button size="sm" variant="outline" onClick={refetch}>
+                    Try again
+                  </Button>
+                }
+              />
+            ) : reviews.length ? (
+              reviews.map((review) => {
+                const sentiment = sentimentByKey[review.sentiment]
+                return (
+                  <Table.Row key={review._id}>
+                    <Table.Cell>
+                      {review.user ? (
+                        <UserCell user={review.user} short />
+                      ) : (
+                        <UserCell name="Deleted user" />
+                      )}
+                    </Table.Cell>
+                    <Table.Cell>
+                      <span className="block max-w-[200px] truncate" title={review.restaurant?.name}>
+                        {review.restaurant?.name || '—'}
+                      </span>
+                    </Table.Cell>
+                    <Table.Cell nowrap>
+                      <span className="inline-flex items-center gap-3" title={sentiment?.label}>
+                        <Star className="h-4 w-4 fill-star text-star" aria-hidden="true" />
+                        {review.score}
+                      </span>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <button
+                        type="button"
+                        onClick={() => openReview(review)}
+                        className="flex max-w-[320px] items-center gap-2 text-left hover:underline focus-visible:underline outline-none"
+                        title={`Open Review #${review.number}`}
+                      >
+                        <span className="truncate">
+                          {review.comment || (
+                            <span className="font-normal text-ink-muted">
+                              {sentiment?.emoji} {sentiment?.label || review.sentiment}
+                            </span>
+                          )}
+                        </span>
+                        {review.photos?.length > 0 && (
+                          <span className="inline-flex shrink-0 items-center gap-0.5 text-xs font-normal text-ink-muted">
+                            <ImageIcon className="h-3.5 w-3.5" />
+                            {review.photos.length}
+                          </span>
+                        )}
+                      </button>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <span className="inline-flex flex-wrap items-center gap-1.5">
+                        <StatusPill status={review.status} entity="review" />
+                        {review.openReports > 0 && (
+                          <Badge tone="error" size="sm" title="Open reports about this review">
+                            {review.openReports} report{review.openReports === 1 ? '' : 's'}
+                          </Badge>
+                        )}
+                      </span>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Table.Actions>
+                        {review.status !== 'approved' && (
+                          <ChipButton tone="success" onClick={() => actions.approve(review)}>
+                            Approve
+                          </ChipButton>
+                        )}
+                        <IconButton
+                          icon={Trash2}
+                          label={`Delete Review #${review.number}`}
+                          tone="danger"
+                          onClick={() => actions.remove(review)}
+                        />
+                      </Table.Actions>
+                    </Table.Cell>
+                  </Table.Row>
+                )
+              })
+            ) : (
+              <Table.Empty
+                colSpan={COLS}
+                title={hasFilters ? 'No reviews match these filters' : EMPTY_TITLES[status]}
+                description={search ? `Nothing found for “${search}”.` : undefined}
+              />
+            )}
+          </Table.Body>
+        </Table>
+      </TableCard>
 
-      <Card className="overflow-hidden">
-        {isLoading ? (
-          <SkeletonTable rows={6} />
-        ) : (
-          <Table>
-            <Table.Header>
-              <Table.Row hoverable={false}>
-                <Table.Head>Reviewer</Table.Head>
-                <Table.Head>Restaurant</Table.Head>
-                <Table.Head>Sentiment</Table.Head>
-                <Table.Head>Comment</Table.Head>
-                <Table.Head align="right">Actions</Table.Head>
-              </Table.Row>
-            </Table.Header>
-            <Table.Body>
-              {reviews.map((rv) => (
-                <Table.Row key={rv._id}>
-                  <Table.Cell className="font-medium whitespace-nowrap">
-                    {rv.user?.firstName} {rv.user?.lastName}
-                  </Table.Cell>
-                  <Table.Cell className="text-gray-500 whitespace-nowrap">{rv.restaurant?.name}</Table.Cell>
-                  <Table.Cell>
-                    <Badge variant={sentimentMeta[rv.sentiment]?.variant}>
-                      {sentimentMeta[rv.sentiment]?.label}
-                    </Badge>
-                  </Table.Cell>
-                  <Table.Cell className="max-w-xs">
-                    <span className="text-gray-600 line-clamp-1">{rv.comment || '—'}</span>
-                  </Table.Cell>
-                  <Table.Cell align="right">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => remove(rv)}
-                      className="text-red-600 hover:bg-red-50"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </Table.Cell>
-                </Table.Row>
-              ))}
-              {!reviews.length && (
-                <Table.Row hoverable={false}>
-                  <Table.Cell className="text-center text-gray-400 py-8">No reviews found.</Table.Cell>
-                </Table.Row>
-              )}
-            </Table.Body>
-          </Table>
-        )}
-      </Card>
-
-      {pagination.pages > 1 && (
-        <div className="flex items-center justify-end gap-2">
-          <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-            Prev
-          </Button>
-          <span className="text-sm text-gray-500">
-            Page {pagination.page} / {pagination.pages}
-          </span>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={page >= pagination.pages}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            Next
-          </Button>
-        </div>
-      )}
-    </div>
+      <AddRestaurantModal isOpen={addingRestaurant} onClose={() => setAddingRestaurant(false)} />
+      <ReviewDetailModal key={openReviewId || 'none'} reviewId={openReviewId} sentiments={sentiments} onClose={closeReview} />
+    </>
   )
 }

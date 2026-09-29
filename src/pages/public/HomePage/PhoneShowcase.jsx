@@ -1,70 +1,101 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { MapPin, Search, Home, Heart, User, Star, Navigation, Sparkles } from 'lucide-react'
+import { DEFAULT_SENTIMENTS } from '@store/hooks'
+import { getImageUrl } from '@utils'
+
+/* ── live restaurant data (top-rated listings; grey placeholders while loading / when empty) ── */
+
+const GRADIENTS = ['from-primary/50 to-pink/50', 'from-mint-line to-brand/70', 'from-warning/40 to-primary/60']
+
+const coverOf = (r) => (r?.coverImages?.[0] ? getImageUrl(r.coverImages[0]) : '')
+const metaOf = (r) =>
+  [r?.cuisines?.[0], Number(r?.avgPrice) > 0 ? `${Math.round(r.avgPrice)}₼` : null].filter(Boolean).join(' · ')
+
+const Placeholder = ({ className }) => <span className={`block rounded bg-line/70 ${className}`} />
+
+const Cover = ({ restaurant, className, gradient }) => {
+  const src = coverOf(restaurant)
+  return src ? (
+    <img src={src} alt="" className={`${className} object-cover`} loading="lazy" />
+  ) : (
+    <div className={`${className} bg-linear-to-br ${gradient}`} />
+  )
+}
 
 /* ── individual app screens rendered inside the phone ── */
 
-const MiniCard = ({ gradient, name, meta }) => (
-  <div className="rounded-2xl bg-white border border-gray-100 shadow-sm overflow-hidden">
-    <div className={`h-16 bg-gradient-to-br ${gradient}`} />
+const MiniCard = ({ restaurant, gradient }) => (
+  <div className="rounded-2xl bg-surface border border-line shadow-sm overflow-hidden">
+    <Cover restaurant={restaurant} gradient={gradient} className="h-16 w-full" />
     <div className="p-2.5">
-      <p className="text-[11px] font-semibold text-gray-900 leading-tight truncate">{name}</p>
-      <p className="text-[9px] text-green-600 mt-0.5">
-        Open now <span className="text-gray-400">· {meta}</span>
-      </p>
+      {restaurant ? (
+        <>
+          <p className="font-display text-[11px] font-bold text-ink leading-tight truncate">{restaurant.name}</p>
+          <p className="font-display text-[9px] mt-0.5 truncate">
+            <span className={restaurant.openNow ? 'text-brand' : 'text-ink-muted'}>
+              {restaurant.openNow ? 'Open now' : 'Closed'}
+            </span>
+            {metaOf(restaurant) && <span className="text-ink-secondary"> · {metaOf(restaurant)}</span>}
+          </p>
+        </>
+      ) : (
+        <>
+          <Placeholder className="h-2.5 w-4/5" />
+          <Placeholder className="mt-1.5 h-2 w-1/2" />
+        </>
+      )}
     </div>
   </div>
 )
 
-const DiscoverScreen = () => (
+const DiscoverScreen = ({ cityLabel, restaurants }) => (
   <div>
     <div className="flex items-center justify-between">
       <div>
-        <p className="text-[9px] text-gray-400">Location</p>
-        <p className="text-[12px] font-semibold text-gray-900 flex items-center gap-1">
-          <MapPin className="w-3 h-3 text-green-500" /> Baku, Azerbaijan
+        <p className="text-[9px] text-ink-muted">Location</p>
+        <p className="text-[12px] font-semibold text-ink flex items-center gap-1">
+          <MapPin className="w-3 h-3 text-ink-secondary" /> {cityLabel}
         </p>
       </div>
-      <div className="w-7 h-7 rounded-full bg-green-100 border border-green-200 flex items-center justify-center text-[9px] font-bold text-green-700">
+      <div className="w-7 h-7 rounded-full bg-mint border border-mint-line flex items-center justify-center font-display text-[9px] font-bold text-mint-ink">
         LA
       </div>
     </div>
-    <div className="mt-3 flex items-center gap-2 rounded-xl bg-white border border-gray-200 px-3 py-2 shadow-sm">
-      <Search className="w-3.5 h-3.5 text-gray-400" />
-      <span className="text-[10px] text-gray-400">Search restaurants, cuisines...</span>
+    <div className="mt-3 flex items-center gap-2 rounded-lg bg-surface border border-line px-3 py-2">
+      <Search className="w-3.5 h-3.5 text-ink-muted" />
+      <span className="text-[10px] text-ink-placeholder">Search restaurants, cuisines...</span>
     </div>
-    <p className="mt-4 mb-2 text-[11px] font-bold text-gray-900">Near you</p>
+    <p className="mt-4 mb-2 font-display text-[11px] font-bold text-ink">Near you</p>
     <div className="grid grid-cols-2 gap-2">
-      <MiniCard gradient="from-orange-300 to-rose-400" name="SAHiL Bar & Restaurant" meta="1.2 km" />
-      <MiniCard gradient="from-emerald-300 to-teal-500" name="Caravan Baku" meta="800 m" />
+      <MiniCard restaurant={restaurants[0]} gradient={GRADIENTS[0]} />
+      <MiniCard restaurant={restaurants[1]} gradient={GRADIENTS[1]} />
     </div>
-    <div className="mt-3 rounded-2xl bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 p-3 flex items-center justify-between">
+    <div className="mt-3 rounded-2xl bg-subtle p-3 flex items-center justify-between">
       <div>
-        <p className="text-[11px] font-bold text-gray-900">Not sure where to eat?</p>
-        <p className="text-[9px] text-gray-500">We got you covered.</p>
+        <p className="font-display text-[11px] font-bold text-ink">Not sure where to eat?</p>
+        <p className="text-[9px] text-ink-tertiary">We got you covered.</p>
       </div>
-      <span className="text-[10px] font-bold text-white bg-orange-500 rounded-full px-2.5 py-1.5">
-        Surprise me
-      </span>
+      <span className="text-[10px] font-semibold text-canvas bg-primary rounded-md px-2.5 py-1.5">Surprise me</span>
     </div>
   </div>
 )
 
-const MapScreen = () => (
+const MapScreen = ({ restaurants }) => (
   <div>
-    <div className="flex items-center gap-2 rounded-xl bg-white border border-gray-200 px-3 py-2 shadow-sm">
-      <Search className="w-3.5 h-3.5 text-gray-400" />
-      <span className="text-[10px] text-gray-500">All restaurants</span>
+    <div className="flex items-center gap-2 rounded-lg bg-surface border border-line px-3 py-2">
+      <Search className="w-3.5 h-3.5 text-ink-muted" />
+      <span className="text-[10px] text-ink-tertiary">All restaurants</span>
     </div>
     {/* fake map */}
-    <div className="mt-3 h-[176px] rounded-2xl bg-[#EAF3EC] border border-gray-100 relative overflow-hidden">
+    <div className="mt-3 h-[176px] rounded-2xl bg-mint/40 border border-line relative overflow-hidden">
       <div className="absolute inset-0 opacity-60">
-        <div className="absolute left-0 top-10 w-full h-[3px] bg-white" />
-        <div className="absolute left-0 top-24 w-full h-[3px] bg-white" />
-        <div className="absolute left-12 top-0 h-full w-[3px] bg-white" />
-        <div className="absolute left-32 top-0 h-full w-[3px] bg-white" />
-        <div className="absolute right-4 top-6 w-16 h-14 rounded-lg bg-emerald-200/70" />
-        <div className="absolute left-4 bottom-6 w-14 h-12 rounded-lg bg-emerald-200/70" />
+        <div className="absolute left-0 top-10 w-full h-[3px] bg-surface" />
+        <div className="absolute left-0 top-24 w-full h-[3px] bg-surface" />
+        <div className="absolute left-12 top-0 h-full w-[3px] bg-surface" />
+        <div className="absolute left-32 top-0 h-full w-[3px] bg-surface" />
+        <div className="absolute right-4 top-6 w-16 h-14 rounded-lg bg-mint-line/50" />
+        <div className="absolute left-4 bottom-6 w-14 h-12 rounded-lg bg-mint-line/50" />
       </div>
       {[
         { top: 26, left: 30, delay: 0 },
@@ -77,77 +108,112 @@ const MapScreen = () => (
           initial={{ scale: 0, y: -8 }}
           animate={{ scale: 1, y: 0 }}
           transition={{ delay: 0.3 + p.delay, type: 'spring', stiffness: 260, damping: 16 }}
-          className="absolute w-7 h-7 rounded-full bg-red-500 border-2 border-white shadow-md flex items-center justify-center"
+          className="absolute w-7 h-7 rounded-full bg-primary border-2 border-surface shadow-md flex items-center justify-center"
           style={{ top: p.top, left: p.left }}
         >
-          <span className="text-white text-[9px]">🍽</span>
+          <span className="text-canvas text-[9px]">🍽</span>
         </motion.div>
       ))}
-      <div className="absolute bottom-2 right-2 w-7 h-7 rounded-full bg-white shadow flex items-center justify-center">
-        <Navigation className="w-3.5 h-3.5 text-green-600" />
+      <div className="absolute bottom-2 right-2 w-7 h-7 rounded-full bg-surface shadow flex items-center justify-center">
+        <Navigation className="w-3.5 h-3.5 text-brand" />
       </div>
     </div>
-    <div className="mt-3 rounded-2xl bg-white border border-gray-100 shadow-sm p-2.5">
-      <p className="text-[11px] font-semibold text-gray-900">Nero Bistro</p>
-      <p className="text-[9px] text-gray-400 mt-0.5">Italian · 25₼ · 1.4 km</p>
+    <div className="mt-3 rounded-2xl bg-surface border border-line shadow-sm p-2.5">
+      {restaurants[2] || restaurants[0] ? (
+        <>
+          <p className="font-display text-[11px] font-bold text-ink truncate">
+            {(restaurants[2] || restaurants[0]).name}
+          </p>
+          <p className="text-[9px] text-ink-muted mt-0.5 truncate">{metaOf(restaurants[2] || restaurants[0])}</p>
+        </>
+      ) : (
+        <>
+          <Placeholder className="h-2.5 w-2/3" />
+          <Placeholder className="mt-1.5 h-2 w-1/3" />
+        </>
+      )}
     </div>
   </div>
 )
 
-const ReviewScreen = () => (
-  <div>
-    <div className="h-20 rounded-2xl bg-gradient-to-br from-amber-200 to-orange-300" />
-    <p className="mt-3 text-[13px] font-bold text-gray-900">China Town Restaurant</p>
-    <div className="flex items-center gap-1 mt-1">
-      <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-      <span className="text-[10px] font-semibold text-gray-900">3.8</span>
-      <span className="text-[9px] text-gray-400">(128 reviews)</span>
+const ReviewScreen = ({ sentiments, restaurants }) => {
+  const r = restaurants[3] || restaurants[1] || restaurants[0]
+  return (
+    <div>
+      <Cover restaurant={r} gradient={GRADIENTS[2]} className="h-20 w-full rounded-2xl" />
+      {r ? (
+        <>
+          <p className="mt-3 font-display text-[13px] font-bold text-ink truncate">{r.name}</p>
+          <div className="flex items-center gap-1 mt-1">
+            <Star className="w-3 h-3 text-star fill-star" />
+            <span className="text-[10px] font-medium text-ink">{Number(r.rating || 0).toFixed(1)}</span>
+            <span className="text-[9px] text-ink-muted">
+              ({r.reviewCount || 0} {r.reviewCount === 1 ? 'review' : 'reviews'})
+            </span>
+          </div>
+        </>
+      ) : (
+        <>
+          <Placeholder className="mt-3 h-3 w-3/4" />
+          <Placeholder className="mt-2 h-2 w-1/3" />
+        </>
+      )}
+      <div className="mt-3 rounded-2xl bg-surface border border-line p-3">
+        <p className="font-display text-[10px] font-bold text-ink">How was your experience?</p>
+        <div className="mt-2 flex gap-1.5">
+          {sentiments.map((s, i) => {
+            // The first reaction (liked) is shown as picked.
+            const active = i === 0
+            return (
+              <motion.div
+                key={s.key}
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ delay: 0.2 + i * 0.1 }}
+                className={`flex-1 min-w-0 rounded-xl border py-2 px-1 text-center ${
+                  active ? 'border-mint-line bg-mint/50' : 'border-line bg-surface'
+                }`}
+              >
+                <div className="text-sm">{s.emoji}</div>
+                <div
+                  className={`text-[8px] leading-tight mt-0.5 truncate ${active ? 'text-mint-ink' : 'text-ink-muted'}`}
+                >
+                  {s.label}
+                </div>
+              </motion.div>
+            )
+          })}
+        </div>
+        <div className="mt-2 rounded-lg bg-canvas border border-line px-2.5 py-2">
+          <span className="text-[9px] text-ink-placeholder">Add a comment…</span>
+        </div>
+        <div className="mt-2 rounded-md bg-primary py-1.5 text-center">
+          <span className="text-[10px] font-semibold text-canvas">Post review</span>
+        </div>
+      </div>
     </div>
-    <div className="mt-3 rounded-2xl bg-gray-50 border border-gray-100 p-3">
-      <p className="text-[10px] font-bold text-gray-900">How was your experience?</p>
-      <div className="mt-2 flex gap-1.5">
-        {[
-          { e: '😊', l: 'Liked it', active: true },
-          { e: '🙂', l: 'Fine', active: false },
-          { e: '☹️', l: 'Nope', active: false },
-        ].map((s, i) => (
-          <motion.div
-            key={s.l}
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.2 + i * 0.1 }}
-            className={`flex-1 rounded-xl border py-2 text-center ${
-              s.active ? 'border-green-400 bg-green-50' : 'border-gray-200 bg-white'
-            }`}
-          >
-            <div className="text-sm">{s.e}</div>
-            <div className={`text-[8px] mt-0.5 ${s.active ? 'text-green-700' : 'text-gray-400'}`}>
-              {s.l}
-            </div>
-          </motion.div>
-        ))}
-      </div>
-      <div className="mt-2 rounded-xl bg-white border border-gray-200 px-2.5 py-2">
-        <span className="text-[9px] text-gray-400">Add a comment…</span>
-      </div>
-      <div className="mt-2 rounded-full bg-orange-500 py-1.5 text-center">
-        <span className="text-[10px] font-bold text-white">Post review</span>
-      </div>
-    </div>
-  </div>
-)
+  )
+}
 
 const SCREENS = [
-  { key: 'discover', node: <DiscoverScreen />, label: 'Discover', icon: Home },
-  { key: 'map', node: <MapScreen />, label: 'Map search', icon: MapPin },
-  { key: 'review', node: <ReviewScreen />, label: 'Reviews', icon: Star },
+  { key: 'discover', Screen: DiscoverScreen, label: 'Discover', icon: Home },
+  { key: 'map', Screen: MapScreen, label: 'Map search', icon: MapPin },
+  { key: 'review', Screen: ReviewScreen, label: 'Reviews', icon: Star },
 ]
 
 /**
- * PhoneShowcase — device frame that cycles through three live-looking app
- * screens, with floating stat chips orbiting the phone.
+ * PhoneShowcase — device frame that cycles through three app screens, with floating chips
+ * orbiting the phone. The content is live: `restaurants` are the top-rated listings (names,
+ * covers, cuisine, ₼ price, open now, rating), the location line is the default city and the
+ * reactions are the review sentiments from the app config (defaults while loading).
  */
-export const PhoneShowcase = () => {
+export const PhoneShowcase = ({
+  cityLabel = 'Baku, Azerbaijan',
+  sentiments = DEFAULT_SENTIMENTS,
+  restaurants = [],
+}) => {
+  const liked = sentiments.find((s) => s.key === 'liked')
+  const top = restaurants.find((r) => Number(r.rating) > 0)
   const [index, setIndex] = useState(0)
 
   useEffect(() => {
@@ -160,7 +226,7 @@ export const PhoneShowcase = () => {
   return (
     <div className="relative mx-auto w-[290px] sm:w-[310px]">
       <motion.div
-        className="absolute -inset-12 bg-green-400/25 blur-3xl rounded-full"
+        className="absolute -inset-12 bg-brand/20 blur-3xl rounded-full"
         animate={{ scale: [1, 1.08, 1], opacity: [0.6, 0.9, 0.6] }}
         transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
         aria-hidden
@@ -170,11 +236,11 @@ export const PhoneShowcase = () => {
       <motion.div
         animate={{ y: [0, -10, 0] }}
         transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
-        className="relative rounded-[2.8rem] border border-gray-200 bg-white p-2 shadow-2xl shadow-green-900/10"
+        className="relative rounded-[2.8rem] border border-line bg-surface p-2 shadow-2xl shadow-mint-deep/10"
       >
-        <div className="rounded-[2.3rem] bg-gray-50 overflow-hidden">
+        <div className="rounded-[2.3rem] bg-canvas overflow-hidden">
           <div className="flex justify-center pt-2.5 pb-1">
-            <div className="w-24 h-5 bg-gray-900 rounded-full" />
+            <div className="w-24 h-5 bg-ink rounded-full" />
           </div>
 
           <div className="px-4 pb-5 pt-2 min-h-[352px]">
@@ -186,20 +252,20 @@ export const PhoneShowcase = () => {
                 exit={{ opacity: 0, x: -24 }}
                 transition={{ duration: 0.35, ease: 'easeOut' }}
               >
-                {active.node}
+                <active.Screen cityLabel={cityLabel} sentiments={sentiments} restaurants={restaurants} />
               </motion.div>
             </AnimatePresence>
           </div>
 
           {/* tab bar */}
-          <div className="mx-4 mb-4 flex justify-around rounded-2xl bg-white border border-gray-100 py-2 shadow-sm">
+          <div className="mx-4 mb-4 flex justify-around rounded-2xl bg-surface border border-line py-2 shadow-sm">
             {[Home, Search, Heart, User].map((Icon, i) => (
               <Icon
                 key={i}
                 className={`w-4 h-4 ${
                   (index === 0 && i === 0) || (index === 1 && i === 1) || (index === 2 && i === 0)
-                    ? 'text-green-500'
-                    : 'text-gray-300'
+                    ? 'text-brand'
+                    : 'text-ink-disabled'
                 }`}
               />
             ))}
@@ -212,40 +278,43 @@ export const PhoneShowcase = () => {
         {SCREENS.map((s, i) => (
           <button
             key={s.key}
+            type="button"
             onClick={() => setIndex(i)}
             aria-label={s.label}
             className={`h-2 rounded-full transition-all ${
-              i === index ? 'w-7 bg-green-500' : 'w-2 bg-gray-300 hover:bg-gray-400'
+              i === index ? 'w-7 bg-brand' : 'w-2 bg-line hover:bg-ink-disabled'
             }`}
           />
         ))}
       </div>
 
-      {/* floating chips */}
-      <motion.div
-        animate={{ y: [0, -8, 0] }}
-        transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute -left-16 top-24 hidden sm:flex items-center gap-1.5 rounded-full bg-white border border-gray-100 px-3 py-2 shadow-lg shadow-gray-200/60"
-      >
-        <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-        <span className="text-xs font-semibold text-gray-900">4.8</span>
-        <span className="text-[10px] text-gray-400">(1k+ reviews)</span>
-      </motion.div>
+      {/* floating chips (the rating chip names the top-rated restaurant) */}
+      {top && (
+        <motion.div
+          animate={{ y: [0, -8, 0] }}
+          transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+          className="absolute -left-16 top-24 hidden sm:flex items-center gap-1.5 rounded-full bg-surface border border-line px-3 py-2 shadow-lg shadow-ink/5"
+        >
+          <Star className="w-3.5 h-3.5 text-star fill-star" />
+          <span className="text-xs font-semibold text-ink">{Number(top?.rating || 0).toFixed(1)}</span>
+          <span className="text-[10px] text-ink-muted truncate max-w-[120px]">{top?.name}</span>
+        </motion.div>
+      )}
       <motion.div
         animate={{ y: [0, 9, 0] }}
         transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
-        className="absolute -right-14 top-52 hidden sm:flex items-center gap-1.5 rounded-full bg-white border border-gray-100 px-3 py-2 shadow-lg shadow-gray-200/60"
+        className="absolute -right-14 top-52 hidden sm:flex items-center gap-1.5 rounded-full bg-surface border border-line px-3 py-2 shadow-lg shadow-ink/5"
       >
-        <span className="text-sm">😊</span>
-        <span className="text-xs font-semibold text-green-600">Liked it</span>
+        <span className="text-sm">{liked?.emoji ?? '😊'}</span>
+        <span className="text-xs font-semibold text-brand-hover">{liked?.label || 'Liked it'}</span>
       </motion.div>
       <motion.div
         animate={{ y: [0, -7, 0] }}
         transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
-        className="absolute -right-10 bottom-28 hidden sm:flex items-center gap-1.5 rounded-full bg-white border border-gray-100 px-3 py-2 shadow-lg shadow-gray-200/60"
+        className="absolute -right-10 bottom-28 hidden sm:flex items-center gap-1.5 rounded-full bg-surface border border-line px-3 py-2 shadow-lg shadow-ink/5"
       >
-        <Sparkles className="w-3.5 h-3.5 text-green-500" />
-        <span className="text-xs font-semibold text-gray-900">Surprise me</span>
+        <Sparkles className="w-3.5 h-3.5 text-primary" />
+        <span className="text-xs font-semibold text-ink">Surprise me</span>
       </motion.div>
     </div>
   )

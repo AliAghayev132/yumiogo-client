@@ -1,125 +1,236 @@
 import { useState } from 'react'
-import { Check, X, FileText, Store, User as UserIcon } from 'lucide-react'
-import Swal from 'sweetalert2'
-import { Card, Table, Badge, Button, SkeletonTable } from '@components'
-import { useGetReportsQuery, useResolveReportMutation } from '@store/api'
+import { useSearchParams } from 'react-router'
+import { Plus, Trash2 } from 'lucide-react'
+import {
+  Badge,
+  Button,
+  ChipButton,
+  FilterMenu,
+  IconButton,
+  StatusPill,
+  Table,
+  TableCard,
+  relativeDay,
+  useBanner,
+  useHeaderSearch,
+  errorMessage,
+} from '@components'
+import { useGetModerationReportsQuery, useExportModerationReportsMutation, useGetTaxonomiesQuery } from '@store/api'
+import { saveTextFile } from '@utils'
+import { AddRestaurantModal } from '../RestaurantsPage/AddRestaurantModal'
+import {
+  STATUS_OPTIONS,
+  STATUS_VALUES,
+  TYPE_OPTIONS,
+  TYPE_TONES,
+  TYPE_VALUES,
+  isClosed,
+  shortName,
+  targetText,
+} from './reportMeta'
+import { ReportDetailModal } from './ReportDetailModal'
+import { ResolveReportDialog } from './ResolveReportDialog'
+import { useReportActions } from './useReportActions'
 
-const typeIcon = { review: FileText, restaurant: Store, user: UserIcon }
-const statusVariant = { open: 'warning', resolved: 'success', dismissed: 'default' }
+const PAGE_SIZE = 10
+const COLS = 7
 
+/**
+ * Reports (Figma 1294:16216): one mixed "User reports" table (every type and status), Filter
+ * (status / type / reason), header search (reason, reporter, target or "#201"), CSV export,
+ * Resolve (with resolution note, review action and reporter notification) / Dismiss / View /
+ * delete, and the report detail. Honours the bell links ?report=<id>, ?status= and ?type=.
+ */
 export const ReportsPage = () => {
-  const [status, setStatus] = useState('open')
-  const { data, isLoading } = useGetReportsQuery({ status })
-  const [resolveReport] = useResolveReportMutation()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const banner = useBanner()
+  const actions = useReportActions()
+  const search = useHeaderSearch({ placeholder: 'Search reports or #number' })
+  const [resolving, setResolving] = useState(null)
+  // Figma card header "+ Add restaurants" (same modal as the Restaurants page).
+  const [addingRestaurant, setAddingRestaurant] = useState(false)
+
+  // Filters live in the URL so bell links (?status=open, ?report=<id>) land on the right view.
+  const statusParam = searchParams.get('status')
+  const typeParam = searchParams.get('type')
+  const filters = {
+    status: STATUS_VALUES.includes(statusParam) ? statusParam : '',
+    type: TYPE_VALUES.includes(typeParam) ? typeParam : '',
+    reason: searchParams.get('reason') || '',
+  }
+  const openReportId = searchParams.get('report')
+
+  const params = Object.fromEntries(
+    Object.entries({ ...filters, search }).filter(([, value]) => value)
+  )
+  const filterKey = JSON.stringify(params)
+  const [paging, setPaging] = useState({ key: filterKey, page: 1 })
+  const page = paging.key === filterKey ? paging.page : 1
+  const setPage = (p) => setPaging({ key: filterKey, page: p })
+
+  const { data, isLoading, isFetching, isError, refetch } = useGetModerationReportsQuery({
+    ...params,
+    page,
+    limit: PAGE_SIZE,
+  })
+  const { data: reasonsData } = useGetTaxonomiesQuery({ type: 'reportReason' })
+  const [exportReports, { isLoading: exporting }] = useExportModerationReportsMutation()
 
   const reports = data?.data?.reports || []
+  const counts = data?.data?.counts || {}
+  const total = data?.data?.pagination?.total || 0
+  const reasons = (reasonsData?.data?.items || []).map((r) => r.name)
 
-  const act = async (report, next) => {
+  const updateParams = (patch, { push = false } = {}) => {
+    const next = new URLSearchParams(searchParams)
+    Object.entries(patch).forEach(([name, value]) => (value ? next.set(name, value) : next.delete(name)))
+    setSearchParams(next, { replace: !push })
+  }
+  const openReport = (id) => updateParams({ report: id }, { push: true })
+  const closeReport = () => updateParams({ report: '' }, { push: true })
+
+  const exportCsv = async () => {
     try {
-      await resolveReport({ id: report._id, status: next }).unwrap()
+      const { csv, filename } = await exportReports(params).unwrap()
+      saveTextFile(csv, filename)
     } catch (err) {
-      Swal.fire({ icon: 'error', text: err?.data?.message || 'Failed' })
+      banner.error(errorMessage(err, 'Export failed'))
     }
   }
 
-  const tabs = [
-    { key: 'open', label: 'Open' },
-    { key: 'resolved', label: 'Resolved' },
-    { key: 'dismissed', label: 'Dismissed' },
+  const withCount = (options) =>
+    options.map((o) => ({ ...o, label: counts[o.value] != null ? `${o.label} (${counts[o.value]})` : o.label }))
+
+  const filterGroups = [
+    { key: 'status', label: 'Status', options: withCount(STATUS_OPTIONS) },
+    { key: 'type', label: 'Type', options: TYPE_OPTIONS },
+    ...(reasons.length ? [{ key: 'reason', label: 'Reason', options: reasons }] : []),
   ]
+  const hasFilters = !!(search || filters.status || filters.type || filters.reason)
 
   return (
-    <div className="space-y-4">
-      <div className="flex gap-2">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setStatus(t.key)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              status === t.key ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      <Card className="overflow-hidden">
-        {isLoading ? (
-          <SkeletonTable rows={5} />
-        ) : (
-          <Table>
-            <Table.Header>
-              <Table.Row hoverable={false}>
-                <Table.Head>Type</Table.Head>
-                <Table.Head>Target</Table.Head>
-                <Table.Head>Reason</Table.Head>
-                <Table.Head>Reporter</Table.Head>
-                <Table.Head>Status</Table.Head>
-                <Table.Head align="right">Actions</Table.Head>
-              </Table.Row>
-            </Table.Header>
-            <Table.Body>
-              {reports.map((r) => {
-                const Icon = typeIcon[r.targetType] || FileText
-                return (
-                  <Table.Row key={r._id}>
-                    <Table.Cell>
-                      <span className="inline-flex items-center gap-2 capitalize">
-                        <Icon className="w-4 h-4 text-gray-400" /> {r.targetType}
+    <>
+      <TableCard
+        title="User reports"
+        actions={
+          <>
+            <Button size="sm" variant="outline" loading={exporting} onClick={exportCsv}>
+              Export
+            </Button>
+            <FilterMenu filters={filterGroups} value={filters} onChange={(next) => updateParams(next)} />
+            <Button size="sm" leftIcon={Plus} onClick={() => setAddingRestaurant(true)}>
+              Add restaurants
+            </Button>
+          </>
+        }
+        pagination={{ page, total, limit: PAGE_SIZE, onPageChange: setPage }}
+      >
+        <Table minWidth={960} className={isFetching && !isLoading ? 'opacity-60 transition-opacity' : undefined}>
+          <Table.Header>
+            <Table.Row>
+              <Table.Head width={224}>Reported by</Table.Head>
+              <Table.Head width={148}>Type</Table.Head>
+              <Table.Head width={172}>Target</Table.Head>
+              <Table.Head>Reason</Table.Head>
+              <Table.Head width={148}>Status</Table.Head>
+              <Table.Head width={112}>Date</Table.Head>
+              {/* Figma: the Actions label sits at the column start, the buttons are right-aligned. */}
+              <Table.Head width={140}>Actions</Table.Head>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
+            {isLoading ? (
+              <Table.Loading rows={5} cols={COLS} avatar={false} />
+            ) : isError ? (
+              <Table.Empty
+                colSpan={COLS}
+                title="Could not load reports"
+                action={
+                  <Button size="sm" variant="outline" onClick={refetch}>
+                    Try again
+                  </Button>
+                }
+              />
+            ) : reports.length ? (
+              reports.map((report) => (
+                <Table.Row key={report._id}>
+                  <Table.Cell nowrap>{shortName(report.reporter)}</Table.Cell>
+                  <Table.Cell>
+                    <StatusPill status={report.targetType} entity="reportType" tone={TYPE_TONES[report.targetType]} />
+                  </Table.Cell>
+                  <Table.Cell>
+                    <button
+                      type="button"
+                      onClick={() => openReport(report._id)}
+                      className="block max-w-[172px] truncate text-left outline-none hover:underline focus-visible:underline"
+                      title={`Open Report #${report.number}`}
+                    >
+                      {targetText(report)}
+                    </button>
+                  </Table.Cell>
+                  <Table.Cell>
+                    <span className="inline-flex max-w-[220px] items-center gap-1.5">
+                      <span className="truncate" title={report.description || report.reason}>
+                        {report.reason}
                       </span>
-                    </Table.Cell>
-                    <Table.Cell className="text-gray-700">{r.targetLabel || '—'}</Table.Cell>
-                    <Table.Cell>
-                      <div>
-                        <p className="font-medium text-gray-900">{r.reason}</p>
-                        <p className="text-xs text-gray-400 line-clamp-1">{r.description}</p>
-                      </div>
-                    </Table.Cell>
-                    <Table.Cell className="text-gray-500 whitespace-nowrap">
-                      {r.reporter ? `${r.reporter.firstName} ${r.reporter.lastName}` : 'Anonymous'}
-                    </Table.Cell>
-                    <Table.Cell>
-                      <Badge variant={statusVariant[r.status]}>{r.status}</Badge>
-                    </Table.Cell>
-                    <Table.Cell align="right">
-                      {r.status === 'open' ? (
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            size="sm"
-                            variant="success"
-                            onClick={() => act(r, 'resolved')}
-                            leftIcon={<Check className="w-3.5 h-3.5" />}
-                          >
-                            Resolve
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => act(r, 'dismissed')}
-                            leftIcon={<X className="w-3.5 h-3.5" />}
-                          >
-                            Dismiss
-                          </Button>
-                        </div>
-                      ) : (
-                        <Button size="sm" variant="ghost" onClick={() => act(r, 'open')}>
-                          Reopen
-                        </Button>
+                      {report.target?.isDeleted && (
+                        <Badge tone="neutral" size="sm">
+                          Removed
+                        </Badge>
                       )}
-                    </Table.Cell>
-                  </Table.Row>
-                )
-              })}
-              {!reports.length && (
-                <Table.Row hoverable={false}>
-                  <Table.Cell className="text-center text-gray-400 py-8">No {status} reports.</Table.Cell>
+                    </span>
+                  </Table.Cell>
+                  <Table.Cell>
+                    <StatusPill status={report.status} entity="report" />
+                  </Table.Cell>
+                  <Table.Cell nowrap>{relativeDay(report.createdAt)}</Table.Cell>
+                  <Table.Cell>
+                    <Table.Actions>
+                      {isClosed(report) ? (
+                        <ChipButton onClick={() => openReport(report._id)}>View</ChipButton>
+                      ) : (
+                        <ChipButton tone="success" onClick={() => setResolving(report)}>
+                          Resolve
+                        </ChipButton>
+                      )}
+                      {report.status === 'open' && (
+                        <IconButton
+                          icon={Trash2}
+                          label={`Delete Report #${report.number}`}
+                          tone="danger"
+                          onClick={() => actions.remove(report)}
+                        />
+                      )}
+                    </Table.Actions>
+                  </Table.Cell>
                 </Table.Row>
-              )}
-            </Table.Body>
-          </Table>
-        )}
-      </Card>
-    </div>
+              ))
+            ) : (
+              <Table.Empty
+                colSpan={COLS}
+                title={hasFilters ? 'No reports match these filters' : 'No reports yet'}
+                description={
+                  search
+                    ? `Nothing found for “${search}”.`
+                    : hasFilters
+                      ? undefined
+                      : 'Reports people send from the app about reviews, users, restaurants and lists appear here.'
+                }
+              />
+            )}
+          </Table.Body>
+        </Table>
+      </TableCard>
+
+      <AddRestaurantModal isOpen={addingRestaurant} onClose={() => setAddingRestaurant(false)} />
+      <ReportDetailModal
+        key={openReportId || 'none'}
+        reportId={openReportId}
+        onClose={closeReport}
+        onResolve={setResolving}
+        onOpenReport={(id) => updateParams({ report: id })}
+      />
+      <ResolveReportDialog report={resolving} onClose={() => setResolving(null)} />
+    </>
   )
 }

@@ -1,5 +1,6 @@
 // Redux Toolkit
 import { configureStore } from '@reduxjs/toolkit'
+import { setupListeners } from '@reduxjs/toolkit/query'
 
 // API
 import { baseApi } from './api/baseApi'
@@ -18,3 +19,7 @@ export const store = configureStore({
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(baseApi.middleware),
 })
+
+// Enables refetchOnFocus / refetchOnReconnect for the queries that ask for it (session check,
+// sidebar counters, notifications bell).
+setupListeners(store.dispatch)

@@ -1,59 +1,51 @@
 import { clsx } from 'clsx'
 
-export const Card = ({
-  children,
-  className,
-  padding = 'md',
-  shadow = 'sm',
-  ...props
-}) => {
-  const paddings = {
-    none: '',
-    sm: 'p-4',
-    md: 'p-6',
-    lg: 'p-8',
-  }
-
-  const shadows = {
-    none: '',
-    sm: 'shadow-sm',
-    md: 'shadow-md',
-    lg: 'shadow-lg',
-  }
-
+/**
+ * Card — Figma card surface: white, radius 12, 1px #E0E0E0 border, no shadow.
+ * padding: none | sm (16) | md (24, default) | lg (32) | chart (18, the chart-card inset).
+ * shadow: none (default, Figma) | sm | md | lg.
+ * Sub-parts: Card.Header (title row; `divider` draws the full-width Figma divider),
+ * Card.Title, Card.Description, Card.Content, Card.Footer.
+ */
+export const Card = ({ children, className, padding = 'md', shadow = 'none', as: Tag = 'div', ...props }) => {
+  const paddings = { none: '', sm: 'p-4', md: 'p-6', lg: 'p-8', chart: 'p-[18px]' }
+  const shadows = { none: '', sm: 'shadow-sm', md: 'shadow-md', lg: 'shadow-lg' }
   return (
-    <div
-      className={clsx(
-        'bg-white rounded-xl border border-gray-200',
-        paddings[padding],
-        shadows[shadow],
-        className
-      )}
+    <Tag
+      className={clsx('rounded-xl border border-line bg-surface', paddings[padding], shadows[shadow], className)}
       {...props}
     >
       {children}
-    </div>
+    </Tag>
   )
 }
 
-const CardHeader = ({ children, className }) => (
-  <div className={clsx('mb-4', className)}>{children}</div>
+const CardHeader = ({ children, className, actions, divider = false }) => (
+  <div
+    className={clsx(
+      'flex items-start justify-between gap-4',
+      divider ? 'mb-4 border-b border-line pb-4' : 'mb-4',
+      className
+    )}
+  >
+    <div className="min-w-0">{children}</div>
+    {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+  </div>
 )
 
-const CardTitle = ({ children, className }) => (
-  <h3 className={clsx('text-lg font-semibold text-gray-900', className)}>{children}</h3>
+// Figma card title: DM Sans 700 14/18 #212121; subtitle: Inter 400 12/16 #757575.
+const CardTitle = ({ children, className, as: Tag = 'h3' }) => (
+  <Tag className={clsx('text-sm font-bold leading-[18px] text-ink', className)}>{children}</Tag>
 )
 
 const CardDescription = ({ children, className }) => (
-  <p className={clsx('text-sm text-gray-500 mt-1', className)}>{children}</p>
+  <p className={clsx('mt-0.5 font-chart text-xs leading-4 tracking-[-0.02em] text-ink-muted', className)}>{children}</p>
 )
 
-const CardContent = ({ children, className }) => (
-  <div className={className}>{children}</div>
-)
+const CardContent = ({ children, className }) => <div className={className}>{children}</div>
 
 const CardFooter = ({ children, className }) => (
-  <div className={clsx('mt-4 pt-4 border-t border-gray-100', className)}>{children}</div>
+  <div className={clsx('mt-4 border-t border-line pt-4', className)}>{children}</div>
 )
 
 Card.Header = CardHeader

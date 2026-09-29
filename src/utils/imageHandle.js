@@ -1,28 +1,32 @@
-const API_URL =
-  import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:3042' : '')
+import { API_ORIGIN } from './apiOrigin'
 
 /**
  * Upload directory paths (mirrors server/constants/shared/paths.js).
  */
 export const uploadPaths = {
   avatars: 'uploads/avatars',
-  posts: 'uploads/posts',
+  restaurants: 'uploads/restaurants',
+  reviews: 'uploads/reviews',
+  catalog: 'uploads/catalog',
+  content: 'uploads/content',
 }
 
 /**
- * Get a full image URL from a stored relative path.
- * @param {string} relativePath - e.g. "uploads/posts/abc123.png"
+ * Get a full image URL from a stored relative path (remote http(s) URLs pass through).
+ * @param {string} relativePath - e.g. "uploads/restaurants/abc123.png"
  * @returns {string}
  */
 export const getImageUrl = (relativePath) => {
   if (!relativePath) return ''
-  if (relativePath.startsWith('http')) return relativePath
-  return `${API_URL}/${relativePath}`
+  if (relativePath.startsWith('http') || relativePath.startsWith('blob:') || relativePath.startsWith('data:')) {
+    return relativePath
+  }
+  return `${API_ORIGIN}/${relativePath.replace(/^\/+/, '')}`
 }
 
 /**
  * Get an image URL for a specific upload folder.
- * @param {keyof typeof uploadPaths} folder - e.g. 'avatars', 'posts'
+ * @param {keyof typeof uploadPaths} folder - e.g. 'avatars', 'restaurants'
  * @param {string} filename
  * @returns {string}
  */
@@ -30,7 +34,7 @@ export const getImageUrlFor = (folder, filename) => {
   if (!filename) return ''
   const dir = uploadPaths[folder]
   if (!dir) return ''
-  return `${API_URL}/${dir}/${filename}`
+  return `${API_ORIGIN}/${dir}/${filename}`
 }
 
 /**

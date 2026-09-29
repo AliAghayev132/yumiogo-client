@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
-import Swal from 'sweetalert2'
 
 import {
   SEO,
@@ -13,6 +12,9 @@ import {
   Select,
   Textarea,
   PageLoader,
+  useBanner,
+  useConfirm,
+  errorMessage,
 } from '@components'
 import {
   useGetPostsQuery,
@@ -31,6 +33,8 @@ export const PostsPage = () => {
   const [createPost, { isLoading: isCreating }] = useCreatePostMutation()
   const [updatePost, { isLoading: isUpdating }] = useUpdatePostMutation()
   const [deletePost] = useDeletePostMutation()
+  const banner = useBanner()
+  const confirm = useConfirm()
 
   const posts = data?.data?.posts || []
 
@@ -71,32 +75,22 @@ export const PostsPage = () => {
       setForm(emptyForm)
       setEditingId(null)
     } catch (err) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Save failed',
-        text: err?.data?.message || 'Could not save the post.',
-      })
+      banner.error(errorMessage(err, 'Could not save the post.'), { title: 'Save failed' })
     }
   }
 
   const handleDelete = async (post) => {
-    const result = await Swal.fire({
-      icon: 'warning',
+    const ok = await confirm({
+      tone: 'danger',
       title: 'Delete post?',
-      text: `"${post.title}" will be removed.`,
-      showCancelButton: true,
-      confirmButtonText: 'Delete',
-      confirmButtonColor: '#ef4444',
+      message: `"${post.title}" will be removed.`,
+      confirmText: 'Delete',
     })
-    if (!result.isConfirmed) return
+    if (!ok) return
     try {
       await deletePost(post._id).unwrap()
     } catch (err) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Delete failed',
-        text: err?.data?.message || 'Could not delete the post.',
-      })
+      banner.error(errorMessage(err, 'Could not delete the post.'), { title: 'Delete failed' })
     }
   }
 

@@ -1,28 +1,17 @@
 # pages/
 
-## Məqsəd
-Bu qovluq tətbiqin route-a bağlı ekranlarını (səhifələrini) saxlayır. Qovluğun özündə birbaşa yalnız `index.js` faylı var — o, giriş nöqtəsidir; səhifələr isə iki qrup alt-qovluğuna bölünür: `public/` (autentifikasiya tələb etməyən səhifələr — `HomePage`, `LoginPage`, `RegisterPage`, `NotFoundPage`) və `dashboard/` (autentifikasiyalı panel səhifələri — `DashboardPage`, `PostsPage`, `ProfilePage`). Kök `index.js` `export * from './public'` və `export * from './dashboard'` ilə hər iki qrupu birləşdirir.
+Route screens, one PascalCase folder per page (`UsersPage/UsersPage.jsx` + `index.js`), grouped:
 
-## Adlandırma / yazılış konvensiyası
-Hər səhifə öz PascalCase qovluğunda yaşayır (məs. `public/HomePage/`), içində PascalCase `.jsx` komponenti (`HomePage.jsx`) və qovluğu bağlayan kiçik `index.js` barrel-ı olur. Qrupun `index.js`-i (məs. `pages/public/index.js`) bütün səhifələri yenidən ixrac edir. Səhifələr `export const` ilə adlı ixrac verir və `@pages/public` və ya `@pages/dashboard` alias-ları ilə idxal olunur (bax `routes/PublicRouter.jsx`).
+- `dashboard/` — the admin panel: Dashboard, Analytics, Users (+ `UserDetailPage`), Restaurants
+  (+ `RestaurantDetailPage` with its tabs), Reviews, Reports, Settings, Broadcast, Taxonomy
+  (Catalog types), Cities, App config, FAQs, Legal pages, Onboarding, Profile. Pages use the
+  design system in `@components` (see its README) and the RTK Query hooks from `@store/api`.
+- `public/` — landing (`HomePage`), `LegalPage`, the share landings (`ShareLanding/`), the admin
+  sign-in (`LoginPage` with its `AuthCard` shell, `ForgotPasswordPage`) and `NotFoundPage`.
 
-## Nümunə
-`pages/public/HomePage/HomePage.jsx`:
-```jsx
-import { SEO } from '@components'
+Each group's `index.js` re-exports its pages; routers import them from `@pages/dashboard` /
+`@pages/public`. Page-local helpers (row actions, filter metadata, modals) live next to the page
+in the same folder; anything shared goes to `components/`.
 
-export const HomePage = () => (
-  <>
-    <SEO title="Home" path="/" />
-    <section>{/* hero + features */}</section>
-  </>
-)
-```
-`HomePage/index.js` -> `export { HomePage } from './HomePage'`, qrup `public/index.js` -> `export { HomePage } from './HomePage'`. Route-da isə: `import { HomePage } from '@pages/public'`.
-
-## Yeni fayl necə əlavə olunur
-1. Uyğun qrupda qovluq yarat (məs. `pages/public/AboutPage/`).
-2. İçində `AboutPage.jsx` yarat və `export const AboutPage = () => { ... }` yaz.
-3. `AboutPage/index.js`-ə `export { AboutPage } from './AboutPage'` əlavə et.
-4. Qrupun `index.js`-inə (`pages/public/index.js`) `export { AboutPage } from './AboutPage'` əlavə et.
-5. Uyğun router-də `import { AboutPage } from '@pages/public'` idxal edib `<Route>` təyin et.
+The dashboard shell sets the browser tab title from the sidebar item ("Users | Yumio"); a page
+only renders its own `<SEO>` when it needs a different title.

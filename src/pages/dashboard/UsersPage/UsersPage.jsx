@@ -1,192 +1,282 @@
-import { useState } from 'react'
-import { Search, Ban, CheckCircle2, Trash2, Shield, ShieldOff } from 'lucide-react'
-import Swal from 'sweetalert2'
-import { Card, Table, Badge, Button, Input, SkeletonTable } from '@components'
-import { useGetUsersQuery, useUpdateUserMutation, useDeleteUserMutation } from '@store/api'
+import { useCallback, useMemo, useState } from 'react'
+import { useSelector } from 'react-redux'
+import { useSearchParams } from 'react-router'
+import { Plus, MoreVertical, BadgeCheck, Users as UsersIcon, PauseCircle, Ban, Shield, ShieldOff, Trash2, UserRound } from 'lucide-react'
+import {
+  TableCard,
+  Table,
+  Tabs,
+  FilterMenu,
+  Button,
+  ChipButton,
+  IconButton,
+  DropdownMenu,
+  UserCell,
+  StatusPill,
+  Badge,
+  useHeaderSearch,
+  useBanner,
+  errorMessage,
+  monthYear,
+  formatNumber,
+} from '@components'
+import { useGetUsersQuery, useExportUsersMutation } from '@store/api'
+import { saveTextFile } from '@utils'
+import { useUserActions } from './useUserActions'
+import { UserQuickView } from './UserQuickView'
+import { AddUserModal } from './AddUserModal'
+import { USER_STATUS_TABS, USER_STATUSES } from './userMeta'
 
-const statusVariant = { active: 'success', suspended: 'danger', pending: 'warning' }
+// Figma: "Showing 1–11 of 24,831".
+const PAGE_SIZE = 11
+const COLUMNS = 7
 
-export const UsersPage = () => {
-  const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
-  const { data, isLoading, isFetching } = useGetUsersQuery({ search, page, limit: 10 })
-  const [updateUser] = useUpdateUserMutation()
-  const [deleteUser] = useDeleteUserMutation()
+const FILTERS = [
+  {
+    key: 'role',
+    label: 'Role',
+    options: [
+      { value: 'user', label: 'User' },
+      { value: 'admin', label: 'Admin' },
+    ],
+  },
+  {
+    key: 'verified',
+    label: 'Verified badge',
+    options: [
+      { value: 'true', label: 'Verified' },
+      { value: 'false', label: 'Not verified' },
+    ],
+  },
+  {
+    key: 'sort',
+    label: 'Sort by',
+    allLabel: 'Newest first',
+    options: [
+      { value: 'oldest', label: 'Oldest first' },
+      { value: 'name', label: 'Name' },
+      { value: 'lastLogin', label: 'Last sign-in' },
+    ],
+  },
+]
+const NO_FILTERS = { role: '', verified: '', sort: '' }
 
-  const users = data?.data?.users || []
-  const pagination = data?.data?.pagination || {}
+// Page number that falls back to 1 whenever `key` (search / filters / tab) changes.
+const usePageFor = (key) => {
+  const [state, setState] = useState({ key, page: 1 })
+  const page = state.key === key ? state.page : 1
+  const setPage = useCallback((next) => setState({ key, page: next }), [key])
+  return [page, setPage]
+}
 
-  const toggleStatus = async (user) => {
-    const next = user.status === 'active' ? 'suspended' : 'active'
-    try {
-      await updateUser({ id: user._id, status: next }).unwrap()
-    } catch (err) {
-      Swal.fire({ icon: 'error', text: err?.data?.message || 'Update failed' })
-    }
+const RowActions = ({ user, isSelf, actions, onView }) => {
+  const { status } = user
+  const menu = []
+  if (!isSelf) {
+    if (status === 'active') menu.push({ label: 'Suspend…', icon: PauseCircle, onSelect: () => actions.suspend(user) })
+    if (status === 'pending') menu.push({ label: 'Ban…', icon: Ban, onSelect: () => actions.ban(user) })
   }
-
-  const toggleRole = async (user) => {
-    const next = user.role === 'admin' ? 'user' : 'admin'
-    const res = await Swal.fire({
-      icon: 'question',
-      title: next === 'admin' ? 'Grant admin access?' : 'Remove admin access?',
-      text: `${user.firstName} ${user.lastName} will become "${next}".`,
-      showCancelButton: true,
-      confirmButtonText: 'Confirm',
+  menu.push({
+    label: user.verified ? 'Remove verified badge' : 'Add verified badge',
+    icon: BadgeCheck,
+    onSelect: () => actions.verify(user),
+  })
+  if (!isSelf) {
+    menu.push({
+      label: user.role === 'admin' ? 'Remove admin access' : 'Make admin',
+      icon: user.role === 'admin' ? ShieldOff : Shield,
+      onSelect: () => actions.setRole(user),
     })
-    if (!res.isConfirmed) return
-    try {
-      await updateUser({ id: user._id, role: next }).unwrap()
-    } catch (err) {
-      Swal.fire({ icon: 'error', text: err?.data?.message || 'Update failed' })
-    }
-  }
-
-  const remove = async (user) => {
-    const res = await Swal.fire({
-      icon: 'warning',
-      title: 'Delete user?',
-      text: `${user.firstName} ${user.lastName} will be removed.`,
-      showCancelButton: true,
-      confirmButtonText: 'Delete',
-      confirmButtonColor: '#EF4444',
-    })
-    if (!res.isConfirmed) return
-    try {
-      await deleteUser(user._id).unwrap()
-    } catch (err) {
-      Swal.fire({ icon: 'error', text: err?.data?.message || 'Delete failed' })
-    }
+    menu.push({ divider: true }, { label: 'Delete user', icon: Trash2, tone: 'danger', onSelect: () => actions.remove(user) })
   }
 
   return (
-    <div className="space-y-4">
-      {/* Search */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="relative w-full max-w-sm">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <Input
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value)
-              setPage(1)
-            }}
-            placeholder="Search by name or email..."
-            className="pl-9"
-          />
-        </div>
-        <span className="text-sm text-gray-500">{pagination.total ?? 0} users</span>
-      </div>
+    <Table.Actions>
+      <ChipButton onClick={onView}>View</ChipButton>
+      {!isSelf && status === 'active' && (
+        <>
+          <ChipButton tone="warning" onClick={() => actions.warn(user)}>
+            Warn
+          </ChipButton>
+          <ChipButton tone="danger" onClick={() => actions.ban(user)}>
+            Ban
+          </ChipButton>
+        </>
+      )}
+      {status === 'pending' && (
+        <ChipButton tone="success" onClick={() => actions.approve(user)}>
+          Approve
+        </ChipButton>
+      )}
+      {!isSelf && (status === 'suspended' || status === 'banned') && (
+        <ChipButton tone="success" onClick={() => actions.restore(user)}>
+          Restore
+        </ChipButton>
+      )}
+      <DropdownMenu
+        trigger={<IconButton icon={MoreVertical} label={`More actions for ${user.firstName || 'user'}`} tone="muted" size="xs" />}
+        items={menu}
+        width={220}
+      />
+    </Table.Actions>
+  )
+}
 
-      <Card className="overflow-hidden">
-        {isLoading ? (
-          <SkeletonTable rows={6} />
-        ) : (
-          <Table>
-            <Table.Header>
-              <Table.Row hoverable={false}>
-                <Table.Head>User</Table.Head>
-                <Table.Head>Email</Table.Head>
-                <Table.Head>Role</Table.Head>
-                <Table.Head>Status</Table.Head>
-                <Table.Head align="right">Actions</Table.Head>
-              </Table.Row>
-            </Table.Header>
-            <Table.Body>
-              {users.map((u) => (
+/**
+ * Users (Figma 1280:8340 / 1343:26921): "All users" table card with Export / Filter / + Add user,
+ * status tabs with counts, View · Warn · Ban / View · Restore row chips (+ Approve for pending
+ * accounts and a "more" menu for suspend, verified badge, role and delete), numbered
+ * pagination and the header search. Links: ?status=pending, ?user=<id> (opens the quick view).
+ */
+export const UsersPage = () => {
+  const [params, setParams] = useSearchParams()
+  const rawStatus = params.get('status')
+  const status = USER_STATUSES.includes(rawStatus) ? rawStatus : 'all'
+  const viewId = params.get('user')
+
+  const search = useHeaderSearch({ placeholder: 'Search users by name or e-mail' })
+  const [filters, setFilters] = useState(NO_FILTERS)
+  const [page, setPage] = usePageFor(`${status}|${search}|${JSON.stringify(filters)}`)
+  const [adding, setAdding] = useState(false)
+  const selfId = useSelector((s) => s.auth.user?._id || s.auth.user?.id)
+
+  const query = useMemo(() => {
+    const q = { status, search: search || undefined }
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v) q[k] = v
+    })
+    return q
+  }, [status, search, filters])
+
+  const { data, isLoading, isFetching, isError, refetch } = useGetUsersQuery({ ...query, page, limit: PAGE_SIZE })
+  const [exportUsers, { isLoading: exporting }] = useExportUsersMutation()
+  const actions = useUserActions()
+  const banner = useBanner()
+
+  const users = data?.data?.users || []
+  const pagination = data?.data?.pagination || { total: 0 }
+  const counts = data?.data?.counts || {}
+  const viewing = viewId ? users.find((u) => u._id === viewId) : null
+
+  const setParam = (key, value) =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        if (value) next.set(key, value)
+        else next.delete(key)
+        return next
+      },
+      { replace: key === 'user' }
+    )
+
+  const onExport = async () => {
+    try {
+      const { csv, filename } = await exportUsers(query).unwrap()
+      saveTextFile(csv, filename)
+    } catch (err) {
+      banner.error(errorMessage(err, 'Export failed'))
+    }
+  }
+
+  const tabs = USER_STATUS_TABS.map((t) => ({ ...t, count: counts[t.value] }))
+  const filtered = !!search || Object.values(filters).some(Boolean) || status !== 'all'
+
+  return (
+    <div className="flex flex-col gap-6">
+      <TableCard
+        title="All users"
+        actions={
+          <>
+            <Button size="sm" variant="outline" onClick={onExport} loading={exporting}>
+              Export
+            </Button>
+            <FilterMenu filters={FILTERS} value={filters} onChange={setFilters} />
+            <Button size="sm" leftIcon={Plus} onClick={() => setAdding(true)}>
+              Add user
+            </Button>
+          </>
+        }
+        toolbar={
+          <Tabs
+            variant="pill"
+            items={tabs}
+            value={status}
+            onChange={(v) => setParam('status', v === 'all' ? '' : v)}
+            aria-label="User status"
+            className="max-w-full overflow-x-auto"
+          />
+        }
+        pagination={{ page, total: pagination.total || 0, limit: PAGE_SIZE, onPageChange: setPage }}
+      >
+        <Table minWidth={960}>
+          <Table.Header>
+            <Table.Row>
+              <Table.Head>User</Table.Head>
+              <Table.Head>Email</Table.Head>
+              <Table.Head>Reviews</Table.Head>
+              <Table.Head>Warnings</Table.Head>
+              <Table.Head>Status</Table.Head>
+              <Table.Head>Joined</Table.Head>
+              <Table.Head>Actions</Table.Head>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body className={isFetching && !isLoading ? 'opacity-60 transition-opacity' : undefined}>
+            {isLoading ? (
+              <Table.Loading rows={PAGE_SIZE} cols={COLUMNS} />
+            ) : isError ? (
+              <Table.Empty
+                colSpan={COLUMNS}
+                title="Could not load users"
+                description="Check your connection and try again."
+                action={
+                  <Button size="sm" variant="outline" onClick={refetch}>
+                    Retry
+                  </Button>
+                }
+              />
+            ) : users.length ? (
+              users.map((u) => (
                 <Table.Row key={u._id}>
                   <Table.Cell>
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-lg bg-green-100 text-green-700 text-xs font-bold flex items-center justify-center">
-                        {u.firstName?.[0]}
-                        {u.lastName?.[0]}
-                      </div>
-                      <span className="font-medium">
-                        {u.firstName} {u.lastName}
-                      </span>
+                    <div className="flex items-center gap-2">
+                      <UserCell user={u} />
+                      {u.verified && <BadgeCheck className="h-4 w-4 shrink-0 text-info" aria-label="Verified" />}
+                      {u.role === 'admin' && <Badge tone="purple" size="sm">Admin</Badge>}
                     </div>
                   </Table.Cell>
-                  <Table.Cell className="text-gray-500">{u.email}</Table.Cell>
-                  <Table.Cell>
-                    <Badge variant={u.role === 'admin' ? 'purple' : 'default'}>{u.role}</Badge>
+                  <Table.Cell className="max-w-[240px] truncate" title={u.email}>
+                    {u.email}
                   </Table.Cell>
+                  <Table.Cell>{formatNumber(u.reviewCount ?? 0)}</Table.Cell>
+                  <Table.Cell>{formatNumber(u.warningCount ?? 0)}</Table.Cell>
                   <Table.Cell>
-                    <Badge variant={statusVariant[u.status] || 'default'}>{u.status}</Badge>
+                    <StatusPill status={u.status} entity="user" />
                   </Table.Cell>
-                  <Table.Cell align="right">
-                    <div className="flex items-center justify-end gap-2">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => toggleRole(u)}
-                        className="text-gray-600 hover:bg-gray-100"
-                        title={u.role === 'admin' ? 'Remove admin' : 'Make admin'}
-                      >
-                        {u.role === 'admin' ? (
-                          <ShieldOff className="w-4 h-4" />
-                        ) : (
-                          <Shield className="w-4 h-4" />
-                        )}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant={u.status === 'active' ? 'outline' : 'success'}
-                        onClick={() => toggleStatus(u)}
-                        leftIcon={
-                          u.status === 'active' ? (
-                            <Ban className="w-3.5 h-3.5" />
-                          ) : (
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                          )
-                        }
-                      >
-                        {u.status === 'active' ? 'Suspend' : 'Activate'}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => remove(u)}
-                        className="text-red-600 hover:bg-red-50"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
+                  <Table.Cell nowrap>{monthYear(u.createdAt)}</Table.Cell>
+                  <Table.Cell>
+                    <RowActions
+                      user={u}
+                      isSelf={String(u._id) === String(selfId)}
+                      actions={actions}
+                      onView={() => setParam('user', u._id)}
+                    />
                   </Table.Cell>
                 </Table.Row>
-              ))}
-              {!users.length && (
-                <Table.Row hoverable={false}>
-                  <Table.Cell className="text-center text-gray-400 py-8" align="center">
-                    <span className="block" style={{ gridColumn: '1 / -1' }}>
-                      No users found.
-                    </span>
-                  </Table.Cell>
-                </Table.Row>
-              )}
-            </Table.Body>
-          </Table>
-        )}
-      </Card>
+              ))
+            ) : (
+              <Table.Empty
+                colSpan={COLUMNS}
+                icon={filtered ? UserRound : UsersIcon}
+                title={filtered ? 'No users match these filters' : 'No users yet'}
+                description={search ? `Nothing found for “${search}”.` : undefined}
+              />
+            )}
+          </Table.Body>
+        </Table>
+      </TableCard>
 
-      {/* Pagination */}
-      {pagination.pages > 1 && (
-        <div className="flex items-center justify-end gap-2">
-          <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-            Prev
-          </Button>
-          <span className="text-sm text-gray-500">
-            Page {pagination.page} / {pagination.pages} {isFetching && '…'}
-          </span>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={page >= pagination.pages}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            Next
-          </Button>
-        </div>
-      )}
+      <UserQuickView userId={viewId} initial={viewing} onClose={() => setParam('user', '')} />
+      <AddUserModal isOpen={adding} onClose={() => setAdding(false)} />
     </div>
   )
 }

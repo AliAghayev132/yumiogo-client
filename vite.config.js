@@ -3,9 +3,20 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
+// Local API server for `npm run dev`. The app calls the API on its own origin (see
+// src/utils/apiOrigin.js), so the dev server proxies the API paths to it.
+const API_PROXY_TARGET = process.env.API_PROXY_TARGET || 'http://localhost:3042'
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  server: {
+    proxy: {
+      '/api': API_PROXY_TARGET,
+      '/uploads': API_PROXY_TARGET,
+      '/socket.io': { target: API_PROXY_TARGET, ws: true },
+    },
+  },
   build: {
     rollupOptions: {
       output: {
@@ -14,6 +25,8 @@ export default defineConfig({
         manualChunks(id) {
           if (!id.includes('node_modules')) return undefined
           if (id.includes('framer-motion')) return 'motion'
+          // Charts (dashboard + analytics only) — keeps the dashboard chunk under 500 kB.
+          if (/[\\/](recharts|d3-[^\\/]+|victory-vendor)[\\/]/.test(id)) return 'charts'
           if (id.includes('@reduxjs/toolkit') || id.includes('react-redux')) return 'redux'
           if (
             id.includes('react-router') ||

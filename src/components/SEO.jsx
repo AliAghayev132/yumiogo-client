@@ -1,11 +1,12 @@
 // SEO
 import { Helmet } from 'react-helmet-async'
 
-const SITE_URL = import.meta.env.VITE_SITE_URL || 'http://localhost:5173'
-const SITE_NAME = 'Starter'
-const DEFAULT_TITLE = 'Starter — Fullstack Template'
-const DEFAULT_DESCRIPTION =
-  'A generic fullstack starter template built with React, Vite, Redux Toolkit and Tailwind CSS.'
+// Canonical / Open Graph origin: VITE_SITE_URL, else wherever the site is served from.
+const SITE_URL =
+  import.meta.env.VITE_SITE_URL || (typeof window !== 'undefined' ? window.location.origin : 'https://yumiogo.com')
+const SITE_NAME = 'Yumio'
+const DEFAULT_TITLE = 'Yumio Admin'
+const DEFAULT_DESCRIPTION = 'Yumio admin panel — manage users, restaurants, reviews and reports.'
 const DEFAULT_IMAGE = `${SITE_URL}/og-image.png`
 
 // Per-page <head> tags. Renders title, description, canonical, Open Graph and
@@ -17,7 +18,8 @@ export const SEO = ({
   path = '',
   noindex = false,
 }) => {
-  const pageTitle = title ? `${title} | ${SITE_NAME}` : DEFAULT_TITLE
+  // "Users | Yumio"; titles that already carry the brand are used as-is.
+  const pageTitle = title ? (title.includes(SITE_NAME) ? title : `${title} | ${SITE_NAME}`) : DEFAULT_TITLE
   const url = `${SITE_URL}${path}`
 
   return (

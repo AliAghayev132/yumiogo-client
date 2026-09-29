@@ -1,29 +1,19 @@
 # routes/
 
-## Məqsəd
-Bu qovluq tətbiqin route ağacını qurur. `AppRouter` `BrowserRouter`-i və üst səviyyə `<Routes>`-u saxlayır; `PublicRouter` və `DashboardRouter` route qruplarını `React.lazy` ilə tənbəl (lazy) yükləyir ki, hər qrup öz chunk-ında gəlsin. `DashboardRouter` bütün panel route-larını `ProtectedRoute` ilə mühafizə edir.
+`AppRouter` owns the `BrowserRouter` and splits the app into two lazily loaded route groups, each
+in its own chunk:
 
-## Adlandırma / yazılış konvensiyası
-Router faylları PascalCase `.jsx`-dir və `export const` ilə adlı ixrac verir. Diqqət: `index.js` yalnız `AppRouter`-i ixrac edir — `PublicRouter` və `DashboardRouter` qəsdən barrel-a əlavə olunmur, çünki onlar `AppRouter` daxilində lazy idxal olunur və statik yenidən ixrac code-splitting-i pozardı. İdxal `@routes` (kök router üçün), həmçinin `@layouts`, `@components` və `@pages/...` alias-ları ilə aparılır.
+- `PublicRouter` (`/*`): landing `/`, `/login`, `/forgot-password` (`/register` redirects to
+  `/login` — there is no public sign-up), `/legal/:slug`, the share landings (`/list/:slug`,
+  `/restaurant/:idOrSlug`, `/invite/:code`, `/review/:id`) and the 404.
+- `DashboardRouter` (`/dashboard/*`): every admin page inside `DashboardLayout`, guarded by
+  `ProtectedRoute allowedRoles={['admin']}`. Detail routes: `users/:id`, `restaurants/:id`
+  (`?tab=overview|general|hours|media|menu`), `catalog/:type` (unknown types fall back to
+  cuisines), `content/*`, `profile`.
 
-## Nümunə
-`PublicRouter.jsx` layout və səhifələri birləşdirir:
-```jsx
-import { PublicLayout } from '@layouts'
-import { HomePage, LoginPage } from '@pages/public'
+`index.js` exports only `AppRouter`; the two groups are imported lazily and must not be added to
+the barrel (a static re-export would undo the code split).
 
-export const PublicRouter = () => (
-  <Routes>
-    <Route element={<PublicLayout />}>
-      <Route path="/" element={<HomePage />} />
-    </Route>
-    <Route path="/login" element={<LoginPage />} />
-  </Routes>
-)
-```
-`AppRouter` isə onu lazy yükləyir; `index.js` yalnız `export { AppRouter } from './AppRouter'` verir, giriş nöqtəsi `import { AppRouter } from '@routes'`.
-
-## Yeni fayl necə əlavə olunur
-1. Mövcud qrupa route əlavə edirsənsə, sadəcə uyğun router faylına (`PublicRouter.jsx` və ya `DashboardRouter.jsx`) yeni `<Route>` əlavə et və səhifəni `@pages/...`-dan idxal et.
-2. Tam yeni route qrupu üçün PascalCase fayl yarat (məs. `AdminRouter.jsx`) və `export const AdminRouter = () => (<Routes>...</Routes>)` yaz.
-3. Onu `AppRouter.jsx`-də `lazy(() => import('./AdminRouter').then((m) => ({ default: m.AdminRouter })))` ilə yüklə və `<Route path="/admin/*" element={<AdminRouter />} />` əlavə et. Lazy qrupu `index.js`-ə əlavə ETMƏ.
+Adding an admin page: create it under `pages/dashboard/`, export it from
+`pages/dashboard/index.js`, add a `<Route>` here and a sidebar item (or an `EXTRA_TITLES` entry
+for the header title) in `layouts/dashboard/navigation.js`.
