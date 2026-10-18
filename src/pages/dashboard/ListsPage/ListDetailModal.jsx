@@ -38,7 +38,8 @@ const Thumb = ({ src }) =>
 
 /**
  * List detail (a row's View, or ?list=<id> from the Reports / user pages): owner, privacy and
- * counters, the saved restaurants, collaborators, the reports about the list and "Remove list".
+ * counters, the saved restaurants, collaborators, who saved it, the reports about the list and
+ * "Remove list".
  */
 export const ListDetailModal = ({ listId, onClose }) => {
   const { data, isLoading, isError, error, refetch } = useGetAdminListQuery(listId, { skip: !listId })
@@ -209,6 +210,35 @@ export const ListDetailModal = ({ listId, onClose }) => {
                   </li>
                 ))}
               </ul>
+            </Section>
+          )}
+
+          {list.saveCount > 0 && (
+            <Section
+              title={`Saved by (${formatNumber(list.saveCount)})`}
+              action={
+                list.savedBy?.length < list.saveCount && (
+                  <span className="text-xs text-ink-muted">Latest {formatNumber(list.savedBy.length)}</span>
+                )
+              }
+            >
+              {list.savedBy?.length ? (
+                <ul className="-my-1 flex flex-wrap gap-x-6 gap-y-1">
+                  {list.savedBy.map((u) => (
+                    <li key={u._id} className="py-1.5">
+                      {u.isDeleted ? (
+                        <UserCell name="Deleted user" />
+                      ) : (
+                        <Link to={`/dashboard/users/${u._id}`} className="block hover:underline">
+                          <UserCell user={u} />
+                        </Link>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-ink-muted">The people who saved it are no longer available.</p>
+              )}
             </Section>
           )}
 

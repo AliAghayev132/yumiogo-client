@@ -3,12 +3,21 @@ import { Pencil, Plus } from 'lucide-react'
 import {
   Modal,
   Input,
-  Textarea,
   Checkbox,
   Button,
   Field,
   ImageField,
+  LanguageBar,
+  LocalizedInput,
+  LocalizedTextarea,
+  TranslateButton,
+  localizedTexts,
   TAXONOMY_TYPES,
+  toTranslationForm,
+  toTranslationPayload,
+  translationEntries,
+  translationStatus,
+  withTranslation,
   useBanner,
   errorMessage,
 } from '@components'
@@ -35,6 +44,12 @@ const toPickerColor = (color) => {
 // Figma review-label headings (server defaults), offered even before any label uses them.
 const DEFAULT_LABEL_GROUPS = ['Good for', 'What was wrong?']
 
+// Texts with az / ru versions (the group heading only exists on review labels).
+const ITEM_TEXTS = ['name', 'description']
+const LABEL_TEXTS = ['name', 'description', 'group']
+const ITEM_TRANSLATE = localizedTexts(ITEM_TEXTS)
+const LABEL_TRANSLATE = localizedTexts(LABEL_TEXTS)
+
 /**
  * Create / edit one catalog item (cuisine, feature, tag, dietary option, dining option, mood,
  * report reason or review label). `item` null = create. Review labels also have a group
@@ -54,6 +69,8 @@ export const TaxonomyFormModal = ({ type, item, groups = [], onClose }) => {
   const [updateLabel, { isLoading: updatingLabel }] = useUpdateReviewLabelMutation()
   const saving = creating || updating || creatingLabel || updatingLabel
   const banner = useBanner()
+  const texts = isLabel ? LABEL_TEXTS : ITEM_TEXTS
+  const [lang, setLang] = useState('en')
 
   const [form, setForm] = useState({
     name: item?.name || '',
@@ -67,11 +84,19 @@ export const TaxonomyFormModal = ({ type, item, groups = [], onClose }) => {
     // Every existing cuisine is on the Home rail, so new ones start there too.
     showOnHome: item?.showOnHome ?? isCuisine,
     showInOnboarding: !!item?.showInOnboarding,
+    translations: toTranslationForm(item?.translations, LABEL_TEXTS),
   })
   const [touched, setTouched] = useState(false)
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
   const setChecked = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.checked }))
+  // AZ / RU text of `field` in the selected language.
+  const tr = (field) => ({
+    lang,
+    translation: form.translations[lang]?.[field],
+    onTranslationChange: (value) =>
+      setForm((f) => ({ ...f, translations: withTranslation(f.translations, lang, field, value) })),
+  })
 
   const name = form.name.trim()
   const color = form.color.trim()
@@ -86,7 +111,10 @@ export const TaxonomyFormModal = ({ type, item, groups = [], onClose }) => {
   const submit = async (e) => {
     e.preventDefault()
     setTouched(true)
-    if (nameError || colorError || iconError) return
+    if (nameError || colorError || iconError) {
+      if (nameError) setLang('en')
+      return
+    }
     const body = {
       name,
       emoji: form.emoji.trim() || null,
@@ -94,6 +122,7 @@ export const TaxonomyFormModal = ({ type, item, groups = [], onClose }) => {
       color: color || null,
       description: form.description.trim(),
       isActive: form.isActive,
+      translations: toTranslationPayload(form.translations, texts),
       ...(isLabel ? { group: form.group.trim() } : { image: form.image || null }),
       ...(isCuisine ? { showOnHome: form.showOnHome } : {}),
       ...(isPreference ? { showInOnboarding: form.showInOnboarding } : {}),
@@ -133,8 +162,22 @@ export const TaxonomyFormModal = ({ type, item, groups = [], onClose }) => {
         isEdit ? `Slug: ${item.slug} (fixed after creation)` : `New ${config.label.toLowerCase()} appear in the app right away.`
       }
     >
+      <Modal.HeaderActions>
+        <TranslateButton
+          form={form}
+          setForm={setForm}
+          texts={isLabel ? LABEL_TRANSLATE : ITEM_TRANSLATE}
+          onLanguageChange={setLang}
+        />
+      </Modal.HeaderActions>
       <form onSubmit={submit} noValidate className="flex flex-col gap-3">
-        <Input
+        <LanguageBar
+          value={lang}
+          onChange={setLang}
+          status={translationStatus(translationEntries(form, form.translations, texts))}
+        />
+        <LocalizedInput
+          {...tr('name')}
           label="Name"
           required
           value={form.name}
@@ -148,7 +191,8 @@ export const TaxonomyFormModal = ({ type, item, groups = [], onClose }) => {
 
         {isLabel && (
           <>
-            <Input
+            <LocalizedInput
+              {...tr('group')}
               label="Group"
               value={form.group}
               onChange={set('group')}
@@ -223,7 +267,14 @@ export const TaxonomyFormModal = ({ type, item, groups = [], onClose }) => {
           </Field>
         </div>
 
-        <Textarea label="Description" value={form.description} onChange={set('description')} rows={2} placeholder="Optional" />
+        <LocalizedTextarea
+          {...tr('description')}
+          label="Description"
+          value={form.description}
+          onChange={set('description')}
+          rows={2}
+          placeholder="Optional"
+        />
 
         <div className="flex flex-col gap-2">
           <Checkbox

@@ -1,8 +1,29 @@
 import { useState } from 'react'
 import { Plus, Pencil } from 'lucide-react'
-import { Modal, Input, Textarea, Select, SwitchRow, Button, useBanner, errorMessage } from '@components'
+import {
+  Modal,
+  Select,
+  SwitchRow,
+  Button,
+  LanguageBar,
+  LocalizedInput,
+  LocalizedTextarea,
+  TranslateButton,
+  localizedTexts,
+  toTranslationForm,
+  toTranslationPayload,
+  translationEntries,
+  translationStatus,
+  withTranslation,
+  useBanner,
+  errorMessage,
+} from '@components'
 import { useCreateFaqMutation, useUpdateFaqMutation } from '@store/api'
 import { AUDIENCES } from './audiences'
+
+// Texts with az / ru versions.
+const FAQ_TEXTS = ['question', 'answer', 'category']
+const FAQ_TRANSLATE = localizedTexts(FAQ_TEXTS)
 
 /** Create / edit one FAQ. `faq` null = create. */
 export const FaqFormModal = ({ faq, categories = [], onClose }) => {
@@ -10,12 +31,14 @@ export const FaqFormModal = ({ faq, categories = [], onClose }) => {
   const [createFaq, { isLoading: creating }] = useCreateFaqMutation()
   const [updateFaq, { isLoading: updating }] = useUpdateFaqMutation()
   const banner = useBanner()
+  const [lang, setLang] = useState('en')
   const [form, setForm] = useState({
     question: faq?.question || '',
     answer: faq?.answer || '',
     category: faq?.category || '',
     audience: faq?.audience || 'both',
     isActive: faq?.isActive ?? true,
+    translations: toTranslationForm(faq?.translations, FAQ_TEXTS),
   })
   const [errors, setErrors] = useState({})
 
@@ -23,6 +46,13 @@ export const FaqFormModal = ({ faq, categories = [], onClose }) => {
     setForm((f) => ({ ...f, [key]: e.target.value }))
     setErrors((errs) => ({ ...errs, [key]: undefined }))
   }
+  // AZ / RU text of `field` in the selected language.
+  const tr = (field) => ({
+    lang,
+    translation: form.translations[lang]?.[field],
+    onTranslationChange: (value) =>
+      setForm((f) => ({ ...f, translations: withTranslation(f.translations, lang, field, value) })),
+  })
 
   const submit = async () => {
     const payload = {
@@ -31,12 +61,16 @@ export const FaqFormModal = ({ faq, categories = [], onClose }) => {
       category: form.category.trim(),
       audience: form.audience,
       isActive: form.isActive,
+      translations: toTranslationPayload(form.translations, FAQ_TEXTS),
     }
     const nextErrors = {
       question: payload.question ? undefined : 'Question is required',
       answer: payload.answer ? undefined : 'Answer is required',
     }
-    if (nextErrors.question || nextErrors.answer) return setErrors(nextErrors)
+    if (nextErrors.question || nextErrors.answer) {
+      setLang('en')
+      return setErrors(nextErrors)
+    }
 
     try {
       if (isEdit) await updateFaq({ id: faq._id, ...payload }).unwrap()
@@ -68,8 +102,17 @@ export const FaqFormModal = ({ faq, categories = [], onClose }) => {
         </>
       }
     >
+      <Modal.HeaderActions>
+        <TranslateButton form={form} setForm={setForm} texts={FAQ_TRANSLATE} onLanguageChange={setLang} />
+      </Modal.HeaderActions>
       <div className="flex flex-col gap-3">
-        <Input
+        <LanguageBar
+          value={lang}
+          onChange={setLang}
+          status={translationStatus(translationEntries(form, form.translations, FAQ_TEXTS))}
+        />
+        <LocalizedInput
+          {...tr('question')}
           label="Question"
           value={form.question}
           onChange={set('question')}
@@ -77,7 +120,8 @@ export const FaqFormModal = ({ faq, categories = [], onClose }) => {
           error={errors.question}
           autoFocus
         />
-        <Textarea
+        <LocalizedTextarea
+          {...tr('answer')}
           label="Answer"
           value={form.answer}
           onChange={set('answer')}
@@ -87,7 +131,8 @@ export const FaqFormModal = ({ faq, categories = [], onClose }) => {
         />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
-            <Input
+            <LocalizedInput
+              {...tr('category')}
               label="Category"
               value={form.category}
               onChange={set('category')}

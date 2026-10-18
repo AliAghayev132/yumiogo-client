@@ -8,12 +8,20 @@ import { API_BASE_URL } from '@utils/apiOrigin'
 // All endpoints are injected against this base query. It attaches the access
 // token from the auth slice unless an Authorization header is already set
 // (e.g. a one-off reset token during password reset).
+//
+// Content languages: the panel edits English + az / ru translations, so every
+// request asks for raw content (X-Content-Mode: raw — the server then keeps
+// `translations` and the English fields even on public routes such as
+// PUT /restaurants/:id or /catalog) and pins Accept-Language to English (the
+// browser's own language would otherwise translate server messages).
 const baseQuery = fetchBaseQuery({
   // Same origin as the site in production (nginx) and in `npm run dev` (Vite proxy), so
   // /api works with no env at all. VITE_API_URL points it at another origin.
   baseUrl: API_BASE_URL,
   credentials: 'include',
   prepareHeaders: (headers, { getState }) => {
+    headers.set('X-Content-Mode', 'raw')
+    headers.set('Accept-Language', 'en')
     if (!headers.get('Authorization')) {
       const token = getState().auth?.accessToken
       if (token) {
@@ -131,7 +139,6 @@ export const baseApi = createApi({
   baseQuery: baseQueryWithReauth,
   tagTypes: [
     'User',
-    'Post',
     'Auth',
     'AdminStats',
     'AdminUser',

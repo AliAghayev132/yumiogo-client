@@ -1,14 +1,46 @@
 import { useState } from 'react'
 import { FolderPlus, Pencil } from 'lucide-react'
-import { Modal, Input, Textarea, Button, SwitchRow, useBanner, errorMessage } from '@components'
+import {
+  Modal,
+  Button,
+  SwitchRow,
+  LanguageBar,
+  LocalizedInput,
+  LocalizedTextarea,
+  TranslateButton,
+  localizedTexts,
+  toTranslationForm,
+  toTranslationPayload,
+  translationEntries,
+  translationStatus,
+  withTranslation,
+  useBanner,
+  errorMessage,
+} from '@components'
 import { useCreateMenuCategoryMutation, useUpdateMenuCategoryMutation } from '@store/api'
+
+// Texts with az / ru versions.
+const CATEGORY_TEXTS = ['name', 'description']
+const CATEGORY_TRANSLATE = localizedTexts(CATEGORY_TEXTS)
 
 const CategoryForm = ({ restaurantId, category, onClose }) => {
   const banner = useBanner()
-  const [name, setName] = useState(category?.name || '')
-  const [description, setDescription] = useState(category?.description || '')
+  const [form, setForm] = useState(() => ({
+    name: category?.name || '',
+    description: category?.description || '',
+    translations: toTranslationForm(category?.translations, CATEGORY_TEXTS),
+  }))
+  const { name, description, translations } = form
   const [isActive, setIsActive] = useState(category ? category.isActive !== false : true)
   const [error, setError] = useState('')
+  const [lang, setLang] = useState('en')
+  // AZ / RU text of `field` in the selected language.
+  const tr = (field) => ({
+    lang,
+    translation: translations[lang]?.[field],
+    onTranslationChange: (value) =>
+      setForm((f) => ({ ...f, translations: withTranslation(f.translations, lang, field, value) })),
+  })
   const [createCategory, { isLoading: creating }] = useCreateMenuCategoryMutation()
   const [updateCategory, { isLoading: updating }] = useUpdateMenuCategoryMutation()
 
@@ -16,9 +48,16 @@ const CategoryForm = ({ restaurantId, category, onClose }) => {
     e.preventDefault()
     if (!name.trim()) {
       setError('Name is required')
+      setLang('en')
       return
     }
-    const body = { restaurantId, name: name.trim(), description: description.trim(), isActive }
+    const body = {
+      restaurantId,
+      name: name.trim(),
+      description: description.trim(),
+      isActive,
+      translations: toTranslationPayload(translations, CATEGORY_TEXTS),
+    }
     try {
       if (category) await updateCategory({ id: category._id, ...body }).unwrap()
       else await createCategory(body).unwrap()
@@ -31,19 +70,40 @@ const CategoryForm = ({ restaurantId, category, onClose }) => {
 
   return (
     <form onSubmit={submit} noValidate>
+      <Modal.HeaderActions>
+        <TranslateButton form={form} setForm={setForm} texts={CATEGORY_TRANSLATE} onLanguageChange={setLang} />
+      </Modal.HeaderActions>
       <div className="flex flex-col gap-3">
-        <Input
+        <LanguageBar
+          value={lang}
+          onChange={setLang}
+          status={translationStatus(translationEntries(form, translations, CATEGORY_TEXTS))}
+        />
+        <LocalizedInput
+          {...tr('name')}
           label="Category name"
           value={name}
           onChange={(e) => {
-            setName(e.target.value)
+            const value = e.target.value
+            setForm((f) => ({ ...f, name: value }))
             setError('')
           }}
           error={error}
           maxLength={80}
           placeholder="e.g. Appetizers and salads"
         />
-        <Textarea label="Description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} maxLength={300} showCount />
+        <LocalizedTextarea
+          {...tr('description')}
+          label="Description (optional)"
+          value={description}
+          onChange={(e) => {
+            const value = e.target.value
+            setForm((f) => ({ ...f, description: value }))
+          }}
+          rows={2}
+          maxLength={300}
+          showCount
+        />
         <SwitchRow
           className="-mx-3"
           label="Visible in the app"

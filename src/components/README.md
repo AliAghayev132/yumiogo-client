@@ -197,6 +197,8 @@ neutral. Esc / overlay close (`closeOnEsc`, `closeOnOverlay`), optional `showClo
 trap, stacked modals, body scroll lock. Prefer the `footer` prop (fixed under the scrolling body);
 the legacy `<Modal.Footer>` child still works (hoisted when it is a direct child, otherwise it sits
 at the end of the body — keep it inside your `<form>` so `type="submit"` works).
+`<Modal.HeaderActions>` anywhere in the body portals its children to the right of the title (a
+form that owns its state puts its `TranslateButton` there).
 
 ### ConfirmDialog
 Declarative version of `useConfirm` (same props + `isOpen`, `onClose`, `onConfirm(reason)`,
@@ -294,6 +296,59 @@ only "+ Add …" carries the `Plus` icon.
 `Input`, `Textarea` (`showCount` + `maxLength`), `SearchInput` (header style, `onClear`), `Select`,
 `Checkbox`, `Radio` (+ `Radio.Group`), `Switch` (40x24, green), `SwitchRow` (Settings row with
 description, `danger` for red descriptions), `Field` (label/error wrapper for custom controls).
+
+**Translated content (en / az / ru)** — `ui/Localized.jsx` + helpers in `ui/translations.js`.
+English is the plain field and keeps its required rules; AZ / RU are optional and fall back to
+English in the apps. A form keeps one `lang` state and swaps its translatable fields:
+```jsx
+const [lang, setLang] = useState('en')
+const tr = (field) => ({ lang, translation: form.translations[lang]?.[field],
+  onTranslationChange: (v) => setForm((f) => ({ ...f, translations: withTranslation(f.translations, lang, field, v) })) })
+
+<LanguageBar value={lang} onChange={setLang}                     // modal forms; cards use <LanguageTabs> in the header
+  status={translationStatus(translationEntries(form, form.translations, ['name', 'description']))} />
+<LocalizedInput {...tr('name')} label="Name" required value={form.name} onChange={set('name')} error={nameError} />
+<LocalizedTextarea {...tr('description')} label="Description" value={form.description} onChange={set('description')} />
+```
+- `LanguageTabs` — pill tabs "EN* · AZ · RU"; the AZ / RU dot shows the filled state (green
+  translated, amber partly, hollow not yet). `LanguageBar` = the tabs in a bordered row with a note.
+- `LocalizedInput` / `LocalizedTextarea` — in EN all Input / Textarea props apply; in AZ / RU the
+  field edits `translation` (label "Name · AZ", English text as the placeholder, hint "Optional —
+  empty uses English."; `translationHint` replaces the hint, `null` hides it; `required`, `error`,
+  `list` and `helperText` are English-only).
+- `TranslationBadge status` — compact "AZ RU" pills for table rows
+  (`documentTranslationStatus(doc, fields)`).
+- Form state ⇄ payload: `toTranslationForm(doc.translations, fields)` → `{ az: {…}, ru: {…} }`
+  of strings; `toTranslationPayload(state, fields)` → trimmed strings ("" clears = English). Send
+  both languages for the fields the form manages — the server merges per language and field.
+- Switch back to EN (`setLang('en')`) when a save is blocked by an English validation error.
+
+**AI translate** — `ui/TranslateButton.jsx` + `ui/useAutoTranslate.js`, server
+`/api/admin/translate` (`store/api/adminTranslateApi.js`). Every form with a language switch has
+one at the top right of its header (modals: `<Modal.HeaderActions>`; cards: next to the
+`LanguageTabs`):
+```jsx
+const FAQ_TRANSLATE = localizedTexts(['question', 'answer', 'category'])   // module level
+<Modal.HeaderActions>
+  <TranslateButton form={form} setForm={setForm} texts={FAQ_TRANSLATE} onLanguageChange={setLang} />
+</Modal.HeaderActions>
+```
+- The panel: From (EN / AZ / RU, default EN), To (the other languages, all on), "Overwrite filled
+  fields" (off = only empty fields are filled), Translate. It sends the source texts a target
+  still misses (in batches within the server limits of 200 keys / 30 000 characters per request),
+  merges the answer into the latest form state (nothing is saved), switches the
+  language tab to the first filled language and shows a "Translated" snackbar; the filled dots
+  update by themselves. Errors show in the panel (503 → "set `OPENROUTER_API_KEY`"); while the
+  status says `enabled: false` the button is disabled with a tooltip.
+- `texts` is a text adapter `{ get(form, lang) → { key: string | string[] }, set(form, lang, texts) }`
+  built from `translations.js`: `localizedTexts(fields)` (English at `form[field]`, AZ / RU at
+  `form.translations[lang][field]`; arrays such as `tabLabels` are positional),
+  `nestedTexts('surprise', adapter)`, `listTexts('sections', adapter, '_key')` (rows by a stable
+  key, so a reorder never mixes answers up) and `combineTexts(...)`. Examples: `PAGE_TRANSLATE`
+  (LegalPagesPage/pageForm.js), `CARD_TRANSLATE` (AppConfigPage/settingsForm.js, incl. the
+  distance labels). `setForm` must accept an updater; keep the form in one state object.
+- `useAutoTranslate({ form, setForm, texts })` is the same logic without the UI
+  (`enabled`, `model`, `translating`, `translate({ from, to, overwrite })`).
 Fields: label DM Sans 14 #616161, 48px #FAFAFA control, #E0E0E0 border, radius 8, green focus,
 red error text. `required` adds an asterisk. `UnsavedBar` floats Save/Discard for long forms.
 Read-only values (Figma quick-profile modal): `<Input label="Reviews" value="142" readOnly />`

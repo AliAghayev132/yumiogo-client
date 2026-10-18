@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Plus } from 'lucide-react'
-import { Modal, Input, Select, Button, useBanner, errorMessage } from '@components'
+import { Modal, Input, Select, Button, Checkbox, useBanner, errorMessage } from '@components'
 import { useCreateUserMutation } from '@store/api'
 
 const ROLE_OPTIONS = [
@@ -8,12 +8,12 @@ const ROLE_OPTIONS = [
   { value: 'admin', label: 'Admin' },
 ]
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const EMPTY = { firstName: '', lastName: '', email: '', role: 'user', password: '' }
+const EMPTY = { firstName: '', lastName: '', email: '', role: 'user', password: '', verified: false }
 
 /**
  * "+ Add user" (Users table header) — modalBox form with the orange add tile. The account is
- * active at once; without a password the person is e-mailed an invitation to choose one
- * (when e-mail is configured on the server).
+ * active at once (optionally with the verified badge); without a password the person is
+ * e-mailed an invitation to choose one (when e-mail is configured on the server).
  */
 export const AddUserModal = ({ isOpen, onClose, onCreated }) => {
   const [form, setForm] = useState(EMPTY)
@@ -50,6 +50,7 @@ export const AddUserModal = ({ isOpen, onClose, onCreated }) => {
         lastName: form.lastName.trim(),
         email: form.email.trim(),
         role: form.role,
+        verified: form.verified,
         ...(form.password ? { password: form.password } : {}),
       }).unwrap()
       const user = res?.data?.user
@@ -109,6 +110,11 @@ export const AddUserModal = ({ isOpen, onClose, onCreated }) => {
             error={errors.password}
             helperText="Leave empty to send an invitation e-mail instead."
             autoComplete="new-password"
+          />
+          <Checkbox
+            label="Verified badge"
+            checked={form.verified}
+            onChange={(e) => setForm((f) => ({ ...f, verified: e.target.checked }))}
           />
         </div>
         <Modal.Footer>

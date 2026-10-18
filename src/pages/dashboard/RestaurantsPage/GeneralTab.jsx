@@ -1,12 +1,37 @@
 import { useState } from 'react'
 import { ArrowLeftRight, LocateFixed, MapPin, Search } from 'lucide-react'
-import { Input, Textarea, Select, Button, Field, Popover, Menu, MenuItem, useBanner, errorMessage } from '@components'
+import {
+  Input,
+  Select,
+  Button,
+  Field,
+  Popover,
+  Menu,
+  MenuItem,
+  LanguageTabs,
+  LocalizedInput,
+  LocalizedTextarea,
+  TranslateButton,
+  localizedTexts,
+  languageNote,
+  translationEntries,
+  translationStatus,
+  withTranslation,
+  useBanner,
+  errorMessage,
+} from '@components'
 import { useLazyGetPlaceSuggestionsQuery } from '@store/api'
 import { ChipMulti } from './ChipMulti'
 import { EditorSection } from './EditorSection'
 import { derivePriceLevel, priceBandsConfigured, priceLabel, findCity } from './restaurantMeta'
 import { todayInput } from './restaurantForm'
 import { LocationPicker } from './LocationPicker'
+
+// Translated texts per editor card (both cards share one language switch).
+const BASIC_TEXTS = ['name', 'description']
+const LOCATION_TEXTS = ['address']
+// Each card's Translate button handles that card's texts.
+const TRANSLATE = { basic: localizedTexts(BASIC_TEXTS), location: localizedTexts(LOCATION_TEXTS) }
 
 // '' → NaN (no coordinate yet) instead of Number('') = 0.
 const coord = (value) => (String(value ?? '').trim() === '' ? NaN : Number(value))
@@ -61,15 +86,33 @@ const PriceLevelPicker = ({ levels, value, onChange, disabled }) => (
  * General tab of the restaurant editor: basic info, categories (all from /admin/meta), price
  * (average + card range; the price level is derived from the average with the Settings bands
  * and shown read-only), location (city select, coordinates, city centre / address lookup)
- * and the other catalog lists.
+ * and the other catalog lists. Name, description and address also take AZ / RU texts: `lang`
+ * (en | az | ru, kept by the editor) picks which language those fields edit.
  */
-export const GeneralTab = ({ form, setForm, restaurant, meta, catalog, priceLevels, disabled }) => {
+export const GeneralTab = ({ form, setForm, restaurant, meta, catalog, priceLevels, disabled, lang = 'en', setLang }) => {
   const banner = useBanner()
   const [lookup, { data: placesData, isFetching: searching }] = useLazyGetPlaceSuggestionsQuery()
   const [placesOpen, setPlacesOpen] = useState(false)
   const [lookupAnchor, setLookupAnchor] = useState(null)
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
+  // AZ / RU text of `field` in the selected language.
+  const tr = (field) => ({
+    lang,
+    translation: form.translations[lang]?.[field],
+    onTranslationChange: (value) =>
+      setForm((f) => ({ ...f, translations: withTranslation(f.translations, lang, field, value) })),
+  })
+  const languageTabs = (fields, card) => (
+    <>
+      <TranslateButton form={form} setForm={setForm} texts={TRANSLATE[card]} onLanguageChange={setLang} disabled={disabled} />
+      <LanguageTabs
+        value={lang}
+        onChange={setLang}
+        status={translationStatus(translationEntries(form, form.translations, fields))}
+      />
+    </>
+  )
   const toggleIn = (key) => (item) =>
     setForm((f) => ({ ...f, [key]: f[key].includes(item) ? f[key].filter((x) => x !== item) : [...f[key], item] }))
 
@@ -133,9 +176,10 @@ export const GeneralTab = ({ form, setForm, restaurant, meta, catalog, priceLeve
 
   return (
     <div className="flex flex-col gap-6">
-      <EditorSection title="Basic info">
-        <Input label="Name" value={form.name} onChange={set('name')} maxLength={120} required disabled={disabled} />
-        <Textarea
+      <EditorSection title="Basic info" description={languageNote(lang)} actions={languageTabs(BASIC_TEXTS, 'basic')}>
+        <LocalizedInput {...tr('name')} label="Name" value={form.name} onChange={set('name')} maxLength={120} required disabled={disabled} />
+        <LocalizedTextarea
+          {...tr('description')}
           label="Description"
           value={form.description}
           onChange={set('description')}
@@ -226,9 +270,9 @@ export const GeneralTab = ({ form, setForm, restaurant, meta, catalog, priceLeve
         )}
       </EditorSection>
 
-      <EditorSection title="Location">
+      <EditorSection title="Location" actions={languageTabs(LOCATION_TEXTS, 'location')}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Input label="Address" value={form.address} onChange={set('address')} maxLength={300} disabled={disabled} />
+          <LocalizedInput {...tr('address')} label="Address" value={form.address} onChange={set('address')} maxLength={300} disabled={disabled} />
           <Select
             label="City"
             value={form.city}

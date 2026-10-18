@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Users, MessageSquareMore, Star, Bookmark } from 'lucide-react'
+import { Link } from 'react-router'
+import { Users, MessageSquareMore, Star, Bookmark, ChevronRight } from 'lucide-react'
 import {
   ResponsiveContainer,
   BarChart,
@@ -16,6 +17,7 @@ import {
   ChartCard,
   ProgressList,
   Banner,
+  EmptyState,
   chartAxisProps,
   chartGridProps,
   chartTooltipProps,
@@ -31,6 +33,16 @@ const SERIES = [
   { key: 'reviews', label: 'Reviews', color: chartColors.reviews },
   { key: 'saves', label: 'Saves', color: chartColors.series[2] },
 ]
+// Restaurants by status rows, in the Restaurants tab order ("closed" is legacy: shown when used).
+const STATUS_ORDER = ['active', 'pending', 'suspended', 'rejected', 'closed']
+const STATUS_LABELS = { active: 'Active', pending: 'Pending', suspended: 'Suspended', rejected: 'Rejected', closed: 'Closed' }
+const STATUS_COLORS = {
+  active: chartColors.series[0],
+  pending: chartColors.series[2],
+  suspended: chartColors.series[3],
+  rejected: chartColors.series[1],
+  closed: chartColors.series[4],
+}
 // Figma "Top cuisines" bar colours: green, purple, orange, pink; "Other" grey.
 const CUISINE_COLORS = [chartColors.series[0], chartColors.series[1], chartColors.series[2], chartColors.series[3]]
 const OTHER_COLOR = chartColors.series[4]
@@ -49,7 +61,8 @@ const Legend = ({ items }) => (
 /**
  * Analytics (Figma 1278:457): this-month stat cards with change vs the same part of last
  * month, Platform growth (users vs reviews, last 6 months), Top cuisines by review count —
- * plus the activity series for a chosen range and the review rating / sentiment splits.
+ * plus the activity series for a chosen range, the review rating / sentiment splits, the most
+ * reviewed restaurants and the restaurants per moderation status.
  */
 export const AnalyticsPage = () => {
   const [range, setRange] = useState('30d')
@@ -80,6 +93,17 @@ export const AnalyticsPage = () => {
     value: s.percent,
     color: s.color || undefined,
   }))
+  const statusRows = Object.fromEntries((a.statusBreakdown || []).map((r) => [r._id, r.count]))
+  const statusTotal = Object.values(statusRows).reduce((sum, n) => sum + n, 0)
+  const statuses = [...STATUS_ORDER, ...Object.keys(statusRows).filter((k) => !STATUS_ORDER.includes(k))]
+    .filter((key) => statusRows[key] || STATUS_ORDER.slice(0, 4).includes(key))
+    .map((key) => ({
+      key,
+      label: STATUS_LABELS[key] || key,
+      value: statusRows[key] || 0,
+      color: STATUS_COLORS[key],
+    }))
+  const topRestaurants = a.topRestaurants || []
 
   return (
     <div className="flex flex-col gap-6">
@@ -178,6 +202,51 @@ export const AnalyticsPage = () => {
           empty={!loading && !a.totalReviews && { title: 'No reviews yet' }}
         >
           <ProgressList items={sentiment} />
+        </ChartCard>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <ChartCard
+          title="Top restaurants"
+          subtitle="Live restaurants with the most reviews"
+          divider
+          loading={loading}
+          className="pb-2"
+          bodyClassName="-mx-[18px]"
+        >
+          {topRestaurants.length ? (
+            <ol className="flex flex-col">
+              {topRestaurants.map((r, i) => (
+                <li key={r._id}>
+                  <Link
+                    to={`/dashboard/restaurants/${r._id}`}
+                    className="flex items-center gap-3 px-[18px] py-2.5 transition-colors hover:bg-canvas"
+                  >
+                    <span className="w-5 shrink-0 font-display text-sm font-semibold text-ink-muted">{i + 1}</span>
+                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{r.name}</span>
+                    <span className="inline-flex shrink-0 items-center gap-1 text-sm text-ink">
+                      <Star className="h-3.5 w-3.5 fill-star text-star" />
+                      {r.reviewCount ? Number(r.rating || 0).toFixed(1) : '—'}
+                    </span>
+                    <span className="w-24 shrink-0 text-right text-xs text-ink-muted">
+                      {formatNumber(r.reviewCount || 0)} reviews
+                    </span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-ink-disabled" />
+                  </Link>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <EmptyState compact title="No live restaurants yet" className="py-6" />
+          )}
+        </ChartCard>
+        <ChartCard
+          title="Restaurants by status"
+          subtitle={`${formatNumber(statusTotal)} listings (Trash not counted)`}
+          loading={loading}
+          empty={!loading && !statusTotal && { title: 'No restaurants yet' }}
+        >
+          <ProgressList items={statuses} total={statusTotal} format={(v, pct) => `${formatNumber(v)} · ${pct}%`} />
         </ChartCard>
       </div>
     </div>

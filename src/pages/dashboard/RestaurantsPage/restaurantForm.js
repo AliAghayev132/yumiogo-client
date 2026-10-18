@@ -1,8 +1,12 @@
+import { toTranslationForm, toTranslationPayload } from '@components'
 import { toHoursState, toHoursPayload } from './openingHours'
 import { priceBandsConfigured } from './restaurantMeta'
 
 // Catalog-backed multi-selects (key = restaurant field = /admin/meta list).
 export const CATALOG_LISTS = ['cuisines', 'dining', 'features', 'tags', 'dietary', 'moods']
+
+// Texts with az / ru versions (Restaurant.translations).
+export const RESTAURANT_TEXTS = ['name', 'description', 'address']
 
 const numText = (v) => (v === null || v === undefined ? '' : String(v))
 
@@ -42,6 +46,7 @@ export const toForm = (r = {}) => {
     hours: toHoursState(r.hours),
     coverImages: [...(r.coverImages || [])],
     logo: r.logo || '',
+    translations: toTranslationForm(r.translations, RESTAURANT_TEXTS),
   }
 }
 
@@ -107,6 +112,7 @@ export const toPayload = (form, { priceLevels = [] } = {}) => {
     hours,
     coverImages: form.coverImages,
     logo: form.logo || null,
+    translations: toTranslationPayload(form.translations, RESTAURANT_TEXTS),
   }
   if (!priceBandsConfigured(priceLevels) && form.priceLevel) payload.priceLevel = form.priceLevel
   return { payload }

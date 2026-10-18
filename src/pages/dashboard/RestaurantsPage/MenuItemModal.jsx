@@ -1,9 +1,32 @@
 import { useState } from 'react'
 import { UtensilsCrossed, Pencil } from 'lucide-react'
-import { Modal, Input, Textarea, Select, Button, SwitchRow, Field, useBanner, errorMessage } from '@components'
+import {
+  Modal,
+  Input,
+  Select,
+  Button,
+  SwitchRow,
+  Field,
+  LanguageBar,
+  LocalizedInput,
+  LocalizedTextarea,
+  TranslateButton,
+  localizedTexts,
+  toTranslationForm,
+  toTranslationPayload,
+  translationEntries,
+  translationStatus,
+  withTranslation,
+  useBanner,
+  errorMessage,
+} from '@components'
 import { useCreateMenuItemMutation, useUpdateMenuItemMutation, useUploadMenuImagesMutation } from '@store/api'
 import { ChipMulti } from './ChipMulti'
 import { PhotoGrid } from './PhotoGrid'
+
+// Texts with az / ru versions.
+const DISH_TEXTS = ['name', 'description']
+const DISH_TRANSLATE = localizedTexts(DISH_TEXTS)
 
 const toState = (item, category) => ({
   name: item?.name || '',
@@ -14,12 +37,14 @@ const toState = (item, category) => ({
   image: item?.image || '',
   isPopular: !!item?.isPopular,
   isAvailable: item ? item.isAvailable !== false : true,
+  translations: toTranslationForm(item?.translations, DISH_TEXTS),
 })
 
 const MenuItemForm = ({ restaurantId, item, category, categories, dietaryOptions, onClose }) => {
   const banner = useBanner()
   const [form, setForm] = useState(() => toState(item, category))
   const [errors, setErrors] = useState({})
+  const [lang, setLang] = useState('en')
   const [createItem, { isLoading: creating }] = useCreateMenuItemMutation()
   const [updateItem, { isLoading: updating }] = useUpdateMenuItemMutation()
   const [uploadImages, { isLoading: uploading }] = useUploadMenuImagesMutation()
@@ -28,6 +53,13 @@ const MenuItemForm = ({ restaurantId, item, category, categories, dietaryOptions
     setForm((f) => ({ ...f, [key]: e.target.value }))
     setErrors((er) => ({ ...er, [key]: undefined }))
   }
+  // AZ / RU text of `field` in the selected language.
+  const tr = (field) => ({
+    lang,
+    translation: form.translations[lang]?.[field],
+    onTranslationChange: (value) =>
+      setForm((f) => ({ ...f, translations: withTranslation(f.translations, lang, field, value) })),
+  })
   const retiredDietary = (item?.dietary || []).filter((d) => !dietaryOptions.includes(d))
 
   const upload = async (files) => {
@@ -49,7 +81,10 @@ const MenuItemForm = ({ restaurantId, item, category, categories, dietaryOptions
     if (!form.name.trim()) next.name = 'Name is required'
     if (String(form.price).trim() === '' || !Number.isFinite(price) || price < 0) next.price = 'Enter a price of 0 or more'
     setErrors(next)
-    if (Object.keys(next).length) return
+    if (Object.keys(next).length) {
+      if (next.name) setLang('en')
+      return
+    }
 
     const body = {
       restaurantId,
@@ -61,6 +96,7 @@ const MenuItemForm = ({ restaurantId, item, category, categories, dietaryOptions
       image: form.image || null,
       isPopular: form.isPopular,
       isAvailable: form.isAvailable,
+      translations: toTranslationPayload(form.translations, DISH_TEXTS),
     }
     try {
       if (item) await updateItem({ id: item._id, ...body }).unwrap()
@@ -79,8 +115,16 @@ const MenuItemForm = ({ restaurantId, item, category, categories, dietaryOptions
 
   return (
     <form onSubmit={submit} noValidate>
+      <Modal.HeaderActions>
+        <TranslateButton form={form} setForm={setForm} texts={DISH_TRANSLATE} onLanguageChange={setLang} />
+      </Modal.HeaderActions>
       <div className="flex flex-col gap-3">
-        <Input label="Dish name" value={form.name} onChange={set('name')} error={errors.name} maxLength={120} placeholder="e.g. Salmon nigiri" />
+        <LanguageBar
+          value={lang}
+          onChange={setLang}
+          status={translationStatus(translationEntries(form, form.translations, DISH_TEXTS))}
+        />
+        <LocalizedInput {...tr('name')} label="Dish name" value={form.name} onChange={set('name')} error={errors.name} maxLength={120} placeholder="e.g. Salmon nigiri" />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input
             label="Price"
@@ -100,7 +144,15 @@ const MenuItemForm = ({ restaurantId, item, category, categories, dietaryOptions
             onValueChange={(v) => setForm((f) => ({ ...f, category: v }))}
           />
         </div>
-        <Textarea label="Description" value={form.description} onChange={set('description')} rows={3} maxLength={500} showCount />
+        <LocalizedTextarea
+          {...tr('description')}
+          label="Description"
+          value={form.description}
+          onChange={set('description')}
+          rows={3}
+          maxLength={500}
+          showCount
+        />
         <ChipMulti
           label="Dietary"
           options={[...dietaryOptions, ...retiredDietary]}

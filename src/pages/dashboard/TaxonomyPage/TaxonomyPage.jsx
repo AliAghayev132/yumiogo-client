@@ -13,6 +13,8 @@ import {
   TableCard,
   Tabs,
   TAXONOMY_TYPES,
+  TranslationBadge,
+  documentTranslationStatus,
   useBatchedReorder,
   useBanner,
   useConfirm,
@@ -223,6 +225,12 @@ const TaxonomyList = ({ type }) => {
                             <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
                           )}
                           {item.name}
+                          <TranslationBadge
+                            status={documentTranslationStatus(
+                              item,
+                              isLabel ? ['name', 'description', 'group'] : ['name', 'description']
+                            )}
+                          />
                         </p>
                         {item.description && (
                           <p className="line-clamp-1 max-w-xs text-xs font-normal text-ink-muted">{item.description}</p>

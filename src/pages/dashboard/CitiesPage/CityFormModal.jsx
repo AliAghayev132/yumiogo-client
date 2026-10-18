@@ -1,10 +1,30 @@
 import { useState } from 'react'
 import { Plus, Pencil } from 'lucide-react'
-import { Modal, Input, SwitchRow, Button, useBanner, errorMessage } from '@components'
+import {
+  Modal,
+  Input,
+  SwitchRow,
+  Button,
+  LanguageBar,
+  LocalizedInput,
+  TranslateButton,
+  localizedTexts,
+  toTranslationForm,
+  toTranslationPayload,
+  translationEntries,
+  translationStatus,
+  withTranslation,
+  useBanner,
+  errorMessage,
+} from '@components'
 import { useCreateCityMutation, useUpdateCityMutation } from '@store/api'
 
 // The server fills the label as "<name>, <country>" when it is left empty.
 const autoLabel = (name, country) => [name, country].filter(Boolean).join(', ')
+
+// Texts with az / ru versions. The English name stays the identifier restaurants store.
+const CITY_TEXTS = ['name', 'label', 'country']
+const CITY_TRANSLATE = localizedTexts(CITY_TEXTS)
 
 const inRange = (value, min, max) => {
   if (value === '' || value === null) return false
@@ -21,6 +41,7 @@ export const CityFormModal = ({ city, defaultCountry = '', onClose }) => {
   const [createCity, { isLoading: creating }] = useCreateCityMutation()
   const [updateCity, { isLoading: updating }] = useUpdateCityMutation()
   const banner = useBanner()
+  const [lang, setLang] = useState('en')
 
   const [form, setForm] = useState({
     name: city?.name || '',
@@ -31,10 +52,18 @@ export const CityFormModal = ({ city, defaultCountry = '', onClose }) => {
     longitude: city?.longitude ?? '',
     isDefault: city?.isDefault ?? false,
     isActive: city?.isActive ?? true,
+    translations: toTranslationForm(city?.translations, CITY_TEXTS),
   })
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
   const setFlag = (key) => (checked) => setForm((f) => ({ ...f, [key]: checked }))
+  // AZ / RU text of `field` in the selected language.
+  const tr = (field) => ({
+    lang,
+    translation: form.translations[lang]?.[field],
+    onTranslationChange: (value) =>
+      setForm((f) => ({ ...f, translations: withTranslation(f.translations, lang, field, value) })),
+  })
 
   const latOk = inRange(form.latitude, -90, 90)
   const lngOk = inRange(form.longitude, -180, 180)
@@ -49,6 +78,7 @@ export const CityFormModal = ({ city, defaultCountry = '', onClose }) => {
     const name = form.name.trim()
     const country = form.country.trim()
     if (!name || !country) {
+      setLang('en')
       banner.error(name ? 'Country is required' : 'Name is required')
       return
     }
@@ -68,6 +98,7 @@ export const CityFormModal = ({ city, defaultCountry = '', onClose }) => {
       longitude: Number(form.longitude),
       isDefault: form.isDefault,
       isActive: form.isActive,
+      translations: toTranslationPayload(form.translations, CITY_TEXTS),
     }
     try {
       if (isEdit) {
@@ -110,9 +141,25 @@ export const CityFormModal = ({ city, defaultCountry = '', onClose }) => {
         </>
       }
     >
+      <Modal.HeaderActions>
+        <TranslateButton form={form} setForm={setForm} texts={CITY_TRANSLATE} onLanguageChange={setLang} />
+      </Modal.HeaderActions>
       <div className="flex flex-col gap-3">
+        <LanguageBar
+          value={lang}
+          onChange={setLang}
+          status={translationStatus(
+            translationEntries(
+              // An empty label is generated from the name, so it counts as English text too.
+              { ...form, label: form.label || autoLabel(form.name.trim(), form.country.trim()) },
+              form.translations,
+              CITY_TEXTS
+            )
+          )}
+        />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Input
+          <LocalizedInput
+            {...tr('name')}
             label="Name"
             value={form.name}
             onChange={set('name')}
@@ -124,10 +171,11 @@ export const CityFormModal = ({ city, defaultCountry = '', onClose }) => {
                 : 'Stored on restaurants as their city.'
             }
           />
-          <Input label="Country" value={form.country} onChange={set('country')} placeholder="Country" />
+          <LocalizedInput {...tr('country')} label="Country" value={form.country} onChange={set('country')} placeholder="Country" />
         </div>
 
-        <Input
+        <LocalizedInput
+          {...tr('label')}
           label="Label"
           value={form.label}
           onChange={set('label')}

@@ -11,7 +11,7 @@ export const adminListsApi = baseApi.injectEndpoints({
     // privacy (public|collaborative|private), owner (user id), deleted ('true' = removed lists)
     // → data: { lists: [{ _id, name, privacy, isDefault, shareSlug, owner, itemCount, saveCount,
     //   collaboratorCount, openReports, isDeleted, deletedAt, createdAt, updatedAt }],
-    //   pagination, counts: { all, public, collaborative, private, deleted } }
+    //   pagination, counts: { all, public, collaborative, private, deleted } } (counts follow owner / search)
     getAdminLists: builder.query({
       query: (params = {}) => ({ url: '/admin/lists', params }),
       providesTags: (result) => [
@@ -19,20 +19,23 @@ export const adminListsApi = baseApi.injectEndpoints({
         { type: 'AdminList', id: 'LIST' },
       ],
     }),
-    // → data: { list: { …list row, items: [{ restaurant, savedAt }], collaborators: [{ user, role }] },
+    // → data: { list: { …list row, items: [{ restaurant, savedAt }], collaborators: [{ user, role }],
+    //   savedBy: [{ _id, firstName, lastName, avatar, verified, status, isDeleted }] (latest 50) },
     //   reports: [{ _id, number, reason, description, status, reporter, createdAt }] }
     getAdminList: builder.query({
       query: (id) => `/admin/lists/${id}`,
       providesTags: (result, error, id) => [{ type: 'AdminList', id }],
     }),
-    // { id, reason? } → data: { list: { _id, name }, summary: { lists, reports } }; 409 when already removed
+    // { id, reason?, ownerId? (cache hint: the owner's user page lists it) }
+    // → data: { list: { _id, name }, summary: { lists, reports } }; 409 when already removed
     removeAdminList: builder.mutation({
       query: ({ id, reason }) => ({ url: `/admin/lists/${id}`, method: 'DELETE', body: reason ? { reason } : {} }),
-      invalidatesTags: (result, error, { id }) => [
+      invalidatesTags: (result, error, { id, ownerId }) => [
         { type: 'AdminList', id },
         { type: 'AdminList', id: 'LIST' },
         { type: 'AdminReport', id: 'LIST' },
         { type: 'AdminUser', id: 'LIST' },
+        ...(ownerId ? [{ type: 'AdminUser', id: String(ownerId) }] : []),
         'AdminStats',
       ],
     }),

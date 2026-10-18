@@ -18,13 +18,40 @@ const REPORT_WRITE_TAGS = [
   'AdminStats',
 ]
 
+/**
+ * Detail pages that show this report: the reported user / restaurant / list / review (and the
+ * review's restaurant and author, whose numbers an enforcement changes) and the reporter's
+ * "Reports filed" list. `report` is the admin report shape (response or the row the caller had).
+ */
+const reportDetailTags = (report) => {
+  if (!report) return []
+  const tags = []
+  const add = (type, id) => id && tags.push({ type, id: String(id) })
+  const t = report.target || {}
+  if (report.targetType === 'user') add('AdminUser', report.targetId)
+  if (report.targetType === 'restaurant') add('AdminRestaurant', report.targetId)
+  if (report.targetType === 'list') {
+    add('AdminList', report.targetId)
+    add('AdminUser', t.owner?._id)
+  }
+  if (report.targetType === 'review') {
+    add('AdminReview', report.targetId)
+    add('AdminRestaurant', t.restaurant?._id)
+    add('AdminUser', t.author?._id)
+  }
+  add('AdminUser', report.reporter?._id)
+  const owner = report.targetOwner
+  add('AdminUser', owner && typeof owner === 'object' ? owner._id : owner)
+  return tags
+}
+
 export const adminReportsApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     // params: page, limit (≤100), status (open|in_review|resolved|dismissed|active|all),
     // type (review|user|restaurant|list), reason, search ("#201", text, reporter name)
     // → data: { reports: [{ _id, number, targetType, targetId, targetLabel, target, reason,
     //   description, reporter (null = System), status, resolutionNote, action, resolvedBy,
-    //   resolvedAt, createdAt }], pagination, counts: { all, open, in_review, resolved, dismissed } }
+    //   resolvedAt, createdAt, targetOwner? }], pagination, counts: { all, open, in_review, resolved, dismissed } }
     getModerationReports: builder.query({
       query: (params = {}) => ({ url: '/admin/reports', params }),
       providesTags: (result) => [
@@ -41,12 +68,21 @@ export const adminReportsApi = baseApi.injectEndpoints({
     // → data: { report }; message "Report #N resolved — reporter notified"
     updateModerationReport: builder.mutation({
       query: ({ id, ...body }) => ({ url: `/admin/reports/${id}`, method: 'PATCH', body }),
-      invalidatesTags: (result, error, { id }) => [{ type: 'AdminReport', id }, ...REPORT_WRITE_TAGS],
+      invalidatesTags: (result, error, { id }) => [
+        { type: 'AdminReport', id },
+        ...REPORT_WRITE_TAGS,
+        ...reportDetailTags(result?.data?.report),
+      ],
     }),
-    // id → data: { report: { _id, number } }
+    // id, or { id, report } (the row, so the pages showing it refresh) → data: { report: { _id, number } }
     deleteModerationReport: builder.mutation({
-      query: (id) => ({ url: `/admin/reports/${id}`, method: 'DELETE' }),
-      invalidatesTags: (result, error, id) => [{ type: 'AdminReport', id }, { type: 'AdminReport', id: 'LIST' }, 'AdminStats'],
+      query: (arg) => ({ url: `/admin/reports/${typeof arg === 'object' ? arg.id : arg}`, method: 'DELETE' }),
+      invalidatesTags: (result, error, arg) => [
+        { type: 'AdminReport', id: typeof arg === 'object' ? arg.id : arg },
+        { type: 'AdminReport', id: 'LIST' },
+        'AdminStats',
+        ...reportDetailTags(typeof arg === 'object' ? arg.report : null),
+      ],
     }),
     // Same filters as the list → { csv, filename } (save with utils/saveTextFile).
     exportModerationReports: builder.mutation({

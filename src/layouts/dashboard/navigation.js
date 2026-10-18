@@ -37,7 +37,8 @@ const taxonomyIcons = {
 
 /*
  * Sidebar sections. Figma (1264:23061): Overview (Dashboard, Analytics), Management (Users,
- * Restaurants, Reviews + count, Reports + count — plus Lists moderation), System (Settings). Catalog and Content are
+ * Restaurants, Reviews + count, Reports + count — plus Lists moderation; Users / Restaurants
+ * also count what waits for approval), System (Settings). Catalog and Content are
  * the admin-managed content sections added after the design; they use the same section style
  * and sit between Management and System.
  * `badge` names a key of navBadges() below.
@@ -53,8 +54,8 @@ export const NAV_SECTIONS = [
   {
     label: 'Management',
     items: [
-      { name: 'Users', path: '/dashboard/users', icon: Users },
-      { name: 'Restaurants', path: '/dashboard/restaurants', icon: Store },
+      { name: 'Users', path: '/dashboard/users', icon: Users, badge: 'users' },
+      { name: 'Restaurants', path: '/dashboard/restaurants', icon: Store, badge: 'restaurants' },
       { name: 'Reviews', path: '/dashboard/reviews', icon: MessageSquareMore, badge: 'reviews' },
       { name: 'Reports', path: '/dashboard/reports', icon: CircleAlert, badge: 'reports' },
       { name: 'Lists', path: '/dashboard/lists', icon: Bookmark },
@@ -108,14 +109,16 @@ export const pageTitleFor = (pathname) =>
   'Dashboard'
 
 /**
- * Sidebar counters (Figma: Reviews + Reports) from GET /admin/stats → data.
- * Prefers `data.badges` ({ reviews, reports, restaurants, users }); falls back to
- * `stats.pendingReviews` / `stats.openReports`.
+ * Sidebar counters from GET /admin/stats → data: Reviews (pending + flagged), Reports (open +
+ * in review) — the Figma pair — plus Restaurants and Users waiting for approval.
+ * Prefers `data.badges` ({ reviews, reports, restaurants, users }); falls back to `stats`.
  */
 export const navBadges = (data = {}) => {
   const { badges = {}, stats = {} } = data || {}
   return {
     reports: badges.reports ?? stats.openReports ?? 0,
     reviews: badges.reviews ?? stats.pendingReviews ?? 0,
+    restaurants: badges.restaurants ?? stats.pendingRestaurants ?? 0,
+    users: badges.users ?? stats.pendingUsers ?? 0,
   }
 }

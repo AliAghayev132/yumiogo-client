@@ -4,7 +4,6 @@ import { clsx } from 'clsx'
 import {
   Card,
   Input,
-  Textarea,
   Checkbox,
   Button,
   IconButton,
@@ -13,6 +12,15 @@ import {
   EmptyState,
   UnsavedBar,
   OrderButtons,
+  LanguageBar,
+  LocalizedInput,
+  LocalizedTextarea,
+  TranslationBadge,
+  TranslateButton,
+  TRANSLATION_HINT,
+  translationEntries,
+  translationStatus,
+  withTranslation,
   moveItem,
   useBanner,
   useConfirm,
@@ -20,7 +28,17 @@ import {
 } from '@components'
 import { useSaveContentPageMutation, useDeleteContentPageMutation } from '@store/api'
 import { formatDateTime } from '@utils'
-import { SLUG_PATTERN, slugify, toForm, toPayload, emptySection, deletePageConfirm } from './pageForm'
+import {
+  SLUG_PATTERN,
+  SECTION_TEXTS,
+  slugify,
+  toForm,
+  toPayload,
+  emptySection,
+  deletePageConfirm,
+  pageTranslationEntries,
+  PAGE_TRANSLATE,
+} from './pageForm'
 
 // Markup the app's Legal screen (and the website /legal page) understands in a section body.
 const BODY_MARKUP_HELP = (
@@ -44,6 +62,8 @@ export const PageEditor = ({ page, existingSlugs, dirtyRef, onSaved, onDeleted }
   const [deletePage, { isLoading: deleting }] = useDeleteContentPageMutation()
   const [form, setForm] = useState(() => toForm(page))
   const [errors, setErrors] = useState({})
+  // Language the title / intro / section fields edit (en | az | ru).
+  const [lang, setLang] = useState('en')
   const banner = useBanner()
   const confirm = useConfirm()
 
@@ -67,6 +87,24 @@ export const PageEditor = ({ page, existingSlugs, dirtyRef, onSaved, onDeleted }
   const removeSection = (index) =>
     setForm((f) => ({ ...f, sections: f.sections.filter((_, i) => i !== index) }))
   const addSection = () => setForm((f) => ({ ...f, sections: [...f.sections, emptySection()] }))
+  // AZ / RU text of a page field / of a section field in the selected language.
+  const tr = (field) => ({
+    lang,
+    translation: form.translations[lang]?.[field],
+    onTranslationChange: (value) =>
+      setForm((f) => ({ ...f, translations: withTranslation(f.translations, lang, field, value) })),
+  })
+  const sectionTr = (index, field) => ({
+    lang,
+    translation: form.sections[index].translations[lang]?.[field],
+    onTranslationChange: (value) =>
+      setForm((f) => ({
+        ...f,
+        sections: f.sections.map((s, i) =>
+          i === index ? { ...s, translations: withTranslation(s.translations, lang, field, value) } : s
+        ),
+      })),
+  })
 
   const save = async () => {
     const slug = isNew ? form.slug.replace(/-+$/, '') : page.slug
@@ -77,7 +115,10 @@ export const PageEditor = ({ page, existingSlugs, dirtyRef, onSaved, onDeleted }
       else if (!SLUG_PATTERN.test(slug)) nextErrors.slug = 'Use lowercase letters, numbers and dashes only'
       else if (existingSlugs.includes(slug)) nextErrors.slug = 'A page with this slug already exists'
     }
-    if (Object.keys(nextErrors).length) return setErrors(nextErrors)
+    if (Object.keys(nextErrors).length) {
+      if (nextErrors.title) setLang('en')
+      return setErrors(nextErrors)
+    }
 
     try {
       await savePage({ slug, ...toPayload(form) }).unwrap()
@@ -107,6 +148,7 @@ export const PageEditor = ({ page, existingSlugs, dirtyRef, onSaved, onDeleted }
         className="-mx-[18px] px-[18px]"
         actions={
           <>
+            <TranslateButton form={form} setForm={setForm} texts={PAGE_TRANSLATE} onLanguageChange={setLang} />
             <StatusPill status={form.isPublished ? 'published' : 'draft'} />
             <Switch
               checked={form.isPublished}
@@ -130,6 +172,7 @@ export const PageEditor = ({ page, existingSlugs, dirtyRef, onSaved, onDeleted }
       </Card.Header>
 
       <div className="flex flex-col gap-4">
+        <LanguageBar value={lang} onChange={setLang} status={translationStatus(pageTranslationEntries(form))} />
         {isNew && (
           <Input
             label="Slug"
@@ -143,7 +186,8 @@ export const PageEditor = ({ page, existingSlugs, dirtyRef, onSaved, onDeleted }
             helperText="Lowercase letters, numbers and dashes."
           />
         )}
-        <Input
+        <LocalizedInput
+          {...tr('title')}
           label="Title"
           value={form.title}
           onChange={(e) => {
@@ -159,7 +203,8 @@ export const PageEditor = ({ page, existingSlugs, dirtyRef, onSaved, onDeleted }
           placeholder="Terms of use"
           error={errors.title}
         />
-        <Textarea
+        <LocalizedTextarea
+          {...tr('intro')}
           label="Intro"
           value={form.intro}
           onChange={set('intro')}
@@ -188,7 +233,12 @@ export const PageEditor = ({ page, existingSlugs, dirtyRef, onSaved, onDeleted }
                 )}
               >
                 <div className="mb-3 flex flex-wrap items-center gap-3">
-                  <span className="text-sm font-semibold text-ink-tertiary">Section {i + 1}</span>
+                  <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-tertiary">
+                    Section {i + 1}
+                    <TranslationBadge
+                      status={translationStatus(translationEntries(section, section.translations, SECTION_TEXTS))}
+                    />
+                  </span>
                   <div className="ml-auto flex items-center gap-2">
                     <Checkbox
                       label="Highlight"
@@ -205,19 +255,22 @@ export const PageEditor = ({ page, existingSlugs, dirtyRef, onSaved, onDeleted }
                   </div>
                 </div>
                 <div className="flex flex-col gap-3">
-                  <Input
+                  <LocalizedInput
+                    {...sectionTr(i, 'heading')}
                     value={section.heading}
                     onChange={(e) => setSection(i, { heading: e.target.value })}
                     placeholder="Heading, e.g. 1. About Yumio"
                     aria-label={`Section ${i + 1} heading`}
                   />
-                  <Textarea
+                  <LocalizedTextarea
+                    {...sectionTr(i, 'body')}
                     value={section.body}
                     onChange={(e) => setSection(i, { body: e.target.value })}
                     rows={4}
                     placeholder="Section text"
                     aria-label={`Section ${i + 1} text`}
                     helperText={BODY_MARKUP_HELP}
+                    translationHint={`${TRANSLATION_HINT} Same markup as the English text.`}
                   />
                 </div>
               </div>

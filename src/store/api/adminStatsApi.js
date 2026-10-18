@@ -5,7 +5,8 @@ import { baseApi } from './baseApi'
  *
  *   GET /admin/stats?days=7|30|90
  *     → { stats: { totalUsers, totalRestaurants, totalReviews, openReports, pendingReports,
- *                  avgRating, usersChange, restaurantsChange, reviewsChange, reportsChange,
+ *                  avgRating, usersChange, restaurantsChange, reviewsChange, reportsChange (new reports),
+ *                  openReportsBefore, openReportsChange (open now vs at the period start),
  *                  newUsers, newRestaurants, newReviews, newReports, pendingRestaurants,
  *                  pendingUsers, pendingReviews, periodDays },
  *         badges: { reviews, reports, restaurants, users },
@@ -17,7 +18,9 @@ import { baseApi } from './baseApi'
  *         platformGrowth: [{ month, label, users, reviews }],
  *         topCuisines: [{ name, slug, color, count, percent }],
  *         sentiment: [{ key, label, emoji, color, count, percent }],
- *         ratingDistribution: [{ key, label, count, percent }], averageScore, totalReviews, … }
+ *         ratingDistribution: [{ key, label, count, percent }], averageScore, totalReviews,
+ *         topRestaurants: [{ _id, name, rating, reviewCount }] (top 5 live by reviews),
+ *         statusBreakdown: [{ _id: status, count }] (non-deleted restaurants), … }
  *
  * The sidebar polls getStats() without arguments (7 days) — the Dashboard reuses that cache
  * entry for its default period.

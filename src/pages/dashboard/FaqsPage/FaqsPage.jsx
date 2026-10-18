@@ -9,6 +9,8 @@ import {
   Switch,
   FilterMenu,
   OrderButtons,
+  TranslationBadge,
+  documentTranslationStatus,
   useBatchedReorder,
   useHeaderSearch,
   useBanner,
@@ -187,7 +189,13 @@ export const FaqsPage = () => {
                       <OrderButtons index={index} count={faqs.length} onMove={move} disabled={filtering} />
                     </Table.Cell>
                     <Table.Cell className="max-w-md">
-                      <p className={faq.isActive ? 'text-ink' : 'text-ink-muted'}>{faq.question}</p>
+                      <p className={faq.isActive ? 'text-ink' : 'text-ink-muted'}>
+                        {faq.question}
+                        <TranslationBadge
+                          className="ml-1.5"
+                          status={documentTranslationStatus(faq, ['question', 'answer', 'category'])}
+                        />
+                      </p>
                       <p className="mt-0.5 line-clamp-2 text-xs font-normal text-ink-muted">{faq.answer}</p>
                     </Table.Cell>
                     <Table.Cell muted nowrap>

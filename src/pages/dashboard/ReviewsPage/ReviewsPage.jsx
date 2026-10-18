@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
-import { Image as ImageIcon, MoreVertical, Plus, RotateCcw, Star, Tags, Trash2, Lightbulb } from 'lucide-react'
+import { Image as ImageIcon, MoreVertical, Plus, RotateCcw, Star, Tags, Trash2, Lightbulb, User, X } from 'lucide-react'
 import {
   Badge,
   Button,
   ChipButton,
+  relativeDay,
   DropdownMenu,
   FilterMenu,
   IconButton,
@@ -28,11 +29,13 @@ import { saveTextFile } from '@utils'
 import { AddRestaurantModal } from '../RestaurantsPage/AddRestaurantModal'
 import { DATE_OPTIONS, SORT_OPTIONS, STATUS_TABS, STATUS_VALUES, reviewQueryParams } from './reviewFilters'
 import { RestaurantFilter } from './RestaurantFilter'
+import { DateRangeFields } from './DateRangeFields'
 import { ReviewDetailModal } from './ReviewDetailModal'
 import { useReviewActions } from './useReviewActions'
 
 const PAGE_SIZE = 10
-const COLS = 6
+const COLS = 8
+const NO_RANGE = { from: '', to: '' }
 
 const EMPTY_TITLES = {
   all: 'No reviews yet',
@@ -47,7 +50,8 @@ const EMPTY_TITLES = {
  * Filter (sentiment / date / sort) + restaurant filter, header search (text, author,
  * restaurant or "#123"), CSV export, Approve / Delete row actions (Figma modalBoxes and
  * snackbars) and the review detail (?review=<id>) with flag / reject / comments / reports.
- * Honours the bell links ?status=<status> and ?review=<id>.
+ * Honours the bell links ?status=<status> and ?review=<id>, and the detail-page links
+ * ?restaurant=<id> / ?user=<id> (read from the URL on every change, not only on mount).
  */
 export const ReviewsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -60,13 +64,17 @@ export const ReviewsPage = () => {
   const status = STATUS_VALUES.includes(statusParam) ? statusParam : 'all'
   const openReviewId = searchParams.get('review')
   const restaurantParam = searchParams.get('restaurant')
+  const userParam = searchParams.get('user')
 
   const [filters, setFilters] = useState({ sentiment: '', date: '', sort: '' })
+  const [range, setRange] = useState(NO_RANGE)
   // Figma card header "+ Add restaurants" (same modal as the Restaurants page).
   const [addingRestaurant, setAddingRestaurant] = useState(false)
-  const [restaurant, setRestaurant] = useState(() => (restaurantParam ? { _id: restaurantParam, name: '' } : null))
+  // Names of restaurants picked in the filter (the URL only carries the id).
+  const [restaurantNames, setRestaurantNames] = useState({})
+  const restaurant = restaurantParam ? { _id: restaurantParam, name: restaurantNames[restaurantParam] || '' } : null
 
-  const params = reviewQueryParams({ status, search, filters, restaurant })
+  const params = reviewQueryParams({ status, search, filters, restaurant, user: userParam, range })
   // Any filter change starts again from page 1 (no effect needed: the page is keyed to the filters).
   const filterKey = JSON.stringify(params)
   const [paging, setPaging] = useState({ key: filterKey, page: 1 })
@@ -88,13 +96,15 @@ export const ReviewsPage = () => {
   const counts = data?.data?.counts || {}
   const total = data?.data?.pagination?.total || 0
   const pendingRequests = requestsData?.data?.counts?.pending || 0
-  const hasFilters = !!(search || restaurant || Object.values(filters).some(Boolean))
+  const hasFilters = !!(search || restaurant || userParam || Object.values(filters).some(Boolean))
 
   // A ?restaurant=<id> link only carries the id: take the name from the loaded rows.
   const restaurantLabel =
     restaurant && !restaurant.name
       ? { ...restaurant, name: reviews.find((r) => r.restaurant?._id === restaurant._id)?.restaurant?.name || 'Selected restaurant' }
       : restaurant
+  // ?user=<id> (User detail → "View all"): the author's name from the loaded rows.
+  const author = userParam ? reviews.find((r) => r.user?._id === userParam)?.user : null
 
   // Opening / closing the detail is a history entry; filter changes replace the current one.
   const updateParams = (patch, { push = false } = {}) => {
@@ -107,8 +117,12 @@ export const ReviewsPage = () => {
   const openReview = (review) => updateParams({ review: review._id }, { push: true })
   const closeReview = () => updateParams({ review: '' }, { push: true })
   const changeRestaurant = (value) => {
-    setRestaurant(value)
+    if (value?._id) setRestaurantNames((names) => ({ ...names, [value._id]: value.name }))
     updateParams({ restaurant: value?._id || '' })
+  }
+  const changeFilters = (next) => {
+    if (next.date !== 'custom') setRange(NO_RANGE)
+    setFilters(next)
   }
 
   const exportCsv = async () => {
@@ -150,7 +164,7 @@ export const ReviewsPage = () => {
             <Button size="sm" variant="outline" loading={exporting} onClick={exportCsv}>
               Export
             </Button>
-            <FilterMenu filters={filterGroups} value={filters} onChange={setFilters} />
+            <FilterMenu filters={filterGroups} value={filters} onChange={changeFilters} />
             <Button size="sm" leftIcon={Plus} onClick={() => setAddingRestaurant(true)}>
               Add restaurants
             </Button>
@@ -172,19 +186,39 @@ export const ReviewsPage = () => {
                 items={STATUS_TABS.map((t) => ({ ...t, count: counts[t.value] ?? undefined }))}
               />
             </div>
-            <RestaurantFilter value={restaurantLabel} onChange={changeRestaurant} />
+            <div className="flex flex-wrap items-center gap-2">
+              {filters.date === 'custom' && (
+                <DateRangeFields
+                  value={range}
+                  onChange={setRange}
+                  onClear={() => changeFilters({ ...filters, date: '' })}
+                />
+              )}
+              {userParam && (
+                <span className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-brand/60 bg-brand-soft pl-3 pr-1 text-sm font-semibold text-ink">
+                  <User className="h-4 w-4" />
+                  <span className="max-w-[160px] truncate">
+                    {author ? [author.firstName, author.lastName].filter(Boolean).join(' ') : 'Selected user'}
+                  </span>
+                  <IconButton icon={X} label="Clear author filter" size="xs" onClick={() => updateParams({ user: '' })} />
+                </span>
+              )}
+              <RestaurantFilter value={restaurantLabel} onChange={changeRestaurant} />
+            </div>
           </div>
         }
         pagination={{ page, total, limit: PAGE_SIZE, onPageChange: setPage }}
       >
-        <Table minWidth={960} className={isFetching && !isLoading ? 'opacity-60 transition-opacity' : undefined}>
+        <Table minWidth={1120} className={isFetching && !isLoading ? 'opacity-60 transition-opacity' : undefined}>
           <Table.Header>
             <Table.Row>
+              <Table.Head width={80}>No.</Table.Head>
               <Table.Head width={224}>User</Table.Head>
               <Table.Head width={200}>Restaurant</Table.Head>
               <Table.Head width={112}>Rating</Table.Head>
               <Table.Head>Reviews</Table.Head>
               <Table.Head width={164}>Status</Table.Head>
+              <Table.Head width={104}>Date</Table.Head>
               {/* Figma: the Actions label sits at the column start, the buttons are right-aligned. */}
               <Table.Head width={150}>Actions</Table.Head>
             </Table.Row>
@@ -207,6 +241,9 @@ export const ReviewsPage = () => {
                 const sentiment = sentimentByKey[review.sentiment]
                 return (
                   <Table.Row key={review._id}>
+                    <Table.Cell nowrap>
+                      <span className="text-ink-muted">{review.number ? `#${review.number}` : '—'}</span>
+                    </Table.Cell>
                     <Table.Cell>
                       {review.user ? (
                         <UserCell user={review.user} short />
@@ -256,6 +293,9 @@ export const ReviewsPage = () => {
                           </Badge>
                         )}
                       </span>
+                    </Table.Cell>
+                    <Table.Cell nowrap>
+                      <span title={new Date(review.createdAt).toLocaleString('en-US')}>{relativeDay(review.createdAt)}</span>
                     </Table.Cell>
                     <Table.Cell>
                       <Table.Actions>

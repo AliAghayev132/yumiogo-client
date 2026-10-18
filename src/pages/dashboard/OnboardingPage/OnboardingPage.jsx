@@ -7,6 +7,8 @@ import {
   IconButton,
   Switch,
   OrderButtons,
+  TranslationBadge,
+  documentTranslationStatus,
   useBatchedReorder,
   useBanner,
   useConfirm,
@@ -128,7 +130,10 @@ export const OnboardingPage = () => {
                     <SlidePreview slide={slide} compact />
                   </Table.Cell>
                   <Table.Cell className="max-w-lg">
-                    <p className={slide.isActive ? 'text-ink' : 'text-ink-muted'}>{slide.title}</p>
+                    <p className={slide.isActive ? 'text-ink' : 'text-ink-muted'}>
+                      {slide.title}
+                      <TranslationBadge className="ml-1.5" status={documentTranslationStatus(slide, ['title', 'subtitle'])} />
+                    </p>
                     {slide.subtitle && (
                       <p className="mt-0.5 line-clamp-2 text-xs font-normal text-ink-muted">{slide.subtitle}</p>
                     )}

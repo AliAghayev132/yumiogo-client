@@ -9,6 +9,8 @@ import {
   Button,
   IconButton,
   OrderButtons,
+  TranslationBadge,
+  documentTranslationStatus,
   useBatchedReorder,
   useHeaderSearch,
   useBanner,
@@ -169,7 +171,10 @@ export const CitiesPage = () => {
                       <OrderButtons index={index} count={list.length} onMove={move} disabled={filtering} />
                     </Table.Cell>
                     <Table.Cell>
-                      <p className={city.isActive ? 'text-ink' : 'text-ink-muted'}>{city.name}</p>
+                      <p className={clsx('inline-flex items-center gap-1.5', city.isActive ? 'text-ink' : 'text-ink-muted')}>
+                        {city.name}
+                        <TranslationBadge status={documentTranslationStatus(city, ['name', 'label', 'country'])} />
+                      </p>
                       <p className="mt-0.5 text-xs font-normal text-ink-muted">{city.label}</p>
                     </Table.Cell>
                     <Table.Cell muted nowrap>

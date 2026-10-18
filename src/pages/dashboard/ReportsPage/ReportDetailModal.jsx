@@ -119,6 +119,29 @@ const TargetPreview = ({ report }) => {
 }
 
 /**
+ * Who owns the reported item: the server's `targetOwner` (id or { _id, firstName, lastName })
+ * when it sends one, else the review author / list owner from the preview. null for users /
+ * restaurants without an owner account.
+ */
+const ownerOf = (report) => {
+  const owner = report.targetOwner
+  if (owner && typeof owner === 'object') return owner
+  if (owner) return { _id: owner }
+  if (report.targetType === 'review') return report.target?.author || null
+  if (report.targetType === 'list') return report.target?.owner || null
+  return null
+}
+
+const UserLink = ({ user, fallback = 'Unknown' }) =>
+  user?._id ? (
+    <Link to={`/dashboard/users/${user._id}`} className="font-semibold text-brand-hover hover:underline">
+      {user.firstName || user.lastName ? fullName(user) : 'Open profile'}
+    </Link>
+  ) : (
+    fallback
+  )
+
+/**
  * Report detail (a row's View action, or ?report=<id> from the bell): reason and description,
  * a preview of the reported item with a link to its admin page, the resolution, the other
  * reports about the same item, and every status action.
@@ -130,6 +153,7 @@ export const ReportDetailModal = ({ reportId, onClose, onResolve, onOpenReport }
   const related = data?.data?.related || []
   const link = report && targetLink(report)
   const closed = report && isClosed(report)
+  const owner = report && ownerOf(report)
 
   const removeAndClose = async () => {
     if (await actions.remove(report)) onClose()
@@ -179,7 +203,14 @@ export const ReportDetailModal = ({ reportId, onClose, onResolve, onOpenReport }
             <StatusPill status={report.status} entity="report" />
             <StatusPill status={report.targetType} entity="reportType" tone={TYPE_TONES[report.targetType]} />
             <span>
-              {report.reporter ? `Reported by ${fullName(report.reporter)}` : 'System report'} · {timeAgo(report.createdAt)}
+              {report.reporter ? (
+                <>
+                  Reported by <UserLink user={report.reporter} />
+                </>
+              ) : (
+                'System report'
+              )}{' '}
+              · {timeAgo(report.createdAt)}
             </span>
           </span>
         )
@@ -228,6 +259,11 @@ export const ReportDetailModal = ({ reportId, onClose, onResolve, onOpenReport }
             }
           >
             <TargetPreview report={report} />
+            {owner && report.targetType !== 'user' && (
+              <p className="mt-3 border-t border-line pt-3 text-sm text-ink-muted">
+                {report.targetType === 'review' ? 'Written by' : 'Owned by'} <UserLink user={owner} />
+              </p>
+            )}
           </Section>
 
           {closed && (
@@ -253,7 +289,7 @@ export const ReportDetailModal = ({ reportId, onClose, onResolve, onOpenReport }
                       Report #{r.number}
                     </button>
                     <span className="min-w-0 flex-1 truncate text-sm text-ink-secondary">
-                      {r.reason} · {r.reporter ? fullName(r.reporter) : 'System'} · {timeAgo(r.createdAt)}
+                      {r.reason} · <UserLink user={r.reporter} fallback="System" /> · {timeAgo(r.createdAt)}
                     </span>
                     <StatusPill status={r.status} entity="report" />
                   </li>

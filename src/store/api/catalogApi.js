@@ -10,6 +10,11 @@ import { baseApi } from './baseApi'
  *  - 'Catalog'    → the public /catalog snapshot
  * Taxonomy / city renames and deletes cascade into restaurants (and report
  * reasons), so those also refresh the restaurant and report lists.
+ *
+ * Every admin document carries `translations: { az: {…}, ru: {…} }` next to its
+ * English fields (taxonomies: name, description, group · cities: name, label,
+ * country · FAQs: question, answer, category · slides: title, subtitle); writes
+ * may send any subset and the server merges per language and field.
  */
 
 // Tags refreshed by any taxonomy / city write.
@@ -212,7 +217,8 @@ export const catalogApi = baseApi.injectEndpoints({
       query: (slug) => `/admin/pages/${slug}`,
       providesTags: (result, error, slug) => [{ type: 'AdminPage', id: slug }],
     }),
-    // Upsert: { slug, title, intro, sections: [{ heading, body, highlight }], isPublished }
+    // Upsert: { slug, title, intro, sections: [{ heading, body, highlight, translations }], isPublished,
+    //   translations: { az: { title, intro }, ru: … } } (section translations: { az: { heading, body }, ru: … })
     saveContentPage: builder.mutation({
       query: ({ slug, ...body }) => ({ url: `/admin/pages/${slug}`, method: 'PUT', body }),
       invalidatesTags: (result, error, { slug }) => [

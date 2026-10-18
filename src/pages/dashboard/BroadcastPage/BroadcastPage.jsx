@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router'
 import { Bell, ExternalLink, Megaphone, Send } from 'lucide-react'
 import {
   Button,
@@ -13,15 +14,19 @@ import {
 import {
   useBroadcastNotificationMutation,
   useGetAdminCitiesQuery,
+  useGetAdminUserQuery,
   useGetBroadcastAudienceQuery,
 } from '@store/api'
+import { UserPicker } from './UserPicker'
 
 const MESSAGE_MAX = 500
 const TITLE_MAX = 120
+// Same rule as the server: an http:// or https:// URL without spaces.
 const LINK = /^https?:\/\/\S+$/i
 
-// Server segments (POST /admin/notifications/broadcast → segment).
+// Server segments (POST /admin/notifications/broadcast → segment); "people" sends userIds.
 const SEGMENTS = [
+  { value: 'people', label: 'Specific people', description: 'Only the accounts you pick' },
   { value: 'all', label: 'Everyone', description: 'Every active account' },
   { value: 'users', label: 'App users', description: 'Everyone except admins' },
   { value: 'verified', label: 'Verified users', description: 'Accounts with the verified badge' },
@@ -30,7 +35,8 @@ const SEGMENTS = [
   { value: 'admins', label: 'Admins', description: 'Admin accounts only (you get a copy too)' },
 ]
 
-const EMPTY = { segment: 'all', city: '', title: '', message: '', link: '' }
+const EMPTY = { segment: 'all', city: '', title: '', message: '', link: '', people: [] }
+const nameOf = (u) => [u?.firstName, u?.lastName].filter(Boolean).join(' ') || u?.email || 'this person'
 
 // "Reaches 12 people (including you)" under the audience picker.
 const reachText = ({ recipients, includesYou }) => {
@@ -74,12 +80,27 @@ const Preview = ({ form }) => (
 )
 
 /**
- * Broadcast (System → Broadcast): send a system notification to everyone or a segment
- * (POST /admin/notifications/broadcast { message, title?, link?, segment, city? }).
+ * Broadcast (System → Broadcast): send a system notification to everyone, a segment or
+ * specific people (POST /admin/notifications/broadcast { message, title?, link?, segment, city?,
+ * userIds? }). ?user=<id> (User detail → "Notify this user") opens it addressed to that account.
  */
 export const BroadcastPage = () => {
-  const [form, setForm] = useState(EMPTY)
+  const [searchParams] = useSearchParams()
+  const presetUserId = searchParams.get('user')
+  const [form, setForm] = useState(() => (presetUserId ? { ...EMPTY, segment: 'people' } : EMPTY))
   const [touched, setTouched] = useState(false)
+  // The ?user= account joins the picked people once it has loaded (until it is removed).
+  const [presetDismissed, setPresetDismissed] = useState(false)
+  const { data: presetData } = useGetAdminUserQuery(presetUserId, { skip: !presetUserId })
+  const presetUser = !presetDismissed && presetData?.data?.user
+  const people =
+    presetUser && !form.people.some((u) => String(u._id) === String(presetUser._id))
+      ? [presetUser, ...form.people]
+      : form.people
+  const setPeople = (next) => {
+    if (presetUser && !next.some((u) => String(u._id) === String(presetUser._id))) setPresetDismissed(true)
+    setForm((f) => ({ ...f, people: next.filter((u) => !presetUser || String(u._id) !== String(presetUser._id)) }))
+  }
   const [broadcast, { isLoading: sending }] = useBroadcastNotificationMutation()
   const { data: citiesData, isError: citiesFailed } = useGetAdminCitiesQuery()
   const confirm = useConfirm()
@@ -87,22 +108,29 @@ export const BroadcastPage = () => {
 
   const cities = (citiesData?.data?.cities || []).filter((c) => c.isActive !== false)
   const segment = SEGMENTS.find((s) => s.value === form.segment) || SEGMENTS[0]
+  const byPeople = form.segment === 'people'
+  const userIds = byPeople ? people.map((u) => String(u._id)) : undefined
   const needsCity = form.segment === 'city' && !form.city
+  const needsPeople = byPeople && !people.length
   const {
     currentData: audienceData,
     isFetching: countingAudience,
     isError: audienceFailed,
   } = useGetBroadcastAudienceQuery(
-    { segment: form.segment, city: form.segment === 'city' ? form.city : undefined },
-    { skip: needsCity }
+    byPeople
+      ? { segment: 'all', userIds }
+      : { segment: form.segment, city: form.segment === 'city' ? form.city : undefined },
+    { skip: needsCity || needsPeople }
   )
-  const audience = needsCity ? null : audienceData?.data
+  const audience = needsCity || needsPeople ? null : audienceData?.data
   const emptyAudience = audience?.recipients === 0
 
   const errors = {
     message: !form.message.trim() ? 'Write a message' : undefined,
-    link: form.link.trim() && !LINK.test(form.link.trim()) ? 'Use a full link starting with https://' : undefined,
+    link:
+      form.link.trim() && !LINK.test(form.link.trim()) ? 'Use a full link starting with http:// or https://' : undefined,
     city: form.segment === 'city' && !form.city ? 'Pick a city' : undefined,
+    people: needsPeople ? 'Add at least one person' : undefined,
     audience: emptyAudience ? 'Nobody matches this audience yet' : undefined,
   }
   const invalid = Object.values(errors).some(Boolean)
@@ -112,7 +140,13 @@ export const BroadcastPage = () => {
     e.preventDefault()
     setTouched(true)
     if (invalid) return
-    const audienceLabel = form.segment === 'city' ? `users in ${form.city}` : segment.label.toLowerCase()
+    const audienceLabel = byPeople
+      ? people.length === 1
+        ? nameOf(people[0])
+        : `${people.length} people`
+      : form.segment === 'city'
+        ? `users in ${form.city}`
+        : segment.label.toLowerCase()
     const ok = await confirm({
       tone: 'primary',
       icon: Megaphone,
@@ -124,8 +158,9 @@ export const BroadcastPage = () => {
           message: form.message.trim(),
           title: form.title.trim() || undefined,
           link: form.link.trim() || undefined,
-          segment: form.segment,
+          segment: byPeople ? 'all' : form.segment,
           city: form.segment === 'city' ? form.city : undefined,
+          userIds,
         }).unwrap(),
     })
     if (!ok) return
@@ -136,6 +171,7 @@ export const BroadcastPage = () => {
       { title: 'Broadcast sent' }
     )
     setForm(EMPTY)
+    setPresetDismissed(true)
     setTouched(false)
   }
 
@@ -164,12 +200,15 @@ export const BroadcastPage = () => {
                   </span>
                 ) : countingAudience ? (
                   ' · Counting…'
-                ) : audienceFailed && !needsCity ? (
+                ) : audienceFailed && !needsCity && !needsPeople ? (
                   <span className="text-error"> · Could not count the audience</span>
                 ) : null}
               </>
             }
           />
+          {byPeople && (
+            <UserPicker value={people} onChange={setPeople} error={touched ? errors.people : undefined} />
+          )}
           {form.segment === 'city' && (
             <Select
               label="City"
@@ -204,7 +243,7 @@ export const BroadcastPage = () => {
             type="url"
             value={form.link}
             onChange={set('link')}
-            placeholder="Optional, https://…"
+            placeholder="Optional, https://… or http://…"
             helperText="Opened when the notification is tapped."
             error={touched ? errors.link : undefined}
           />

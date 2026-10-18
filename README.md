@@ -16,6 +16,33 @@ The Yumio admin panel and the public website, one Vite + React 19 single-page ap
 Everything content-like is admin-managed on the server (`/api/catalog`, `/api/content/*`,
 Settings); the app holds no copies of it.
 
+**Languages.** Admin content exists in English (required), Azerbaijani and Russian (optional —
+the apps fall back to English). Every form that edits such text — catalog items and review
+labels, cities, FAQs, onboarding slides, legal pages (incl. each section), restaurants, menu
+categories and dishes, App config texts and the maintenance message — has an "EN* · AZ · RU"
+switch (`LanguageBar` / `LanguageTabs`, see `src/components/README.md`) and saves the English
+fields plus `translations: { az, ru }`. The panel sends `X-Content-Mode: raw` on every request,
+so even public routes return the English fields and all translations unlocalized.
+
+**AI translate.** Each of those forms / cards also has a **Translate** button at the top right of
+its header: pick From (EN / AZ / RU) and To (the other languages), optionally "Overwrite filled
+fields", and the AI text (server `POST /api/admin/translate`, OpenRouter) is filled into the form
+— nothing is saved until the admin clicks Save. The button is disabled with a tooltip while the
+server has no `OPENROUTER_API_KEY` (`GET /api/admin/translate/status`).
+
+**Bulk import.** Restaurants → **Import restaurants** (`/dashboard/restaurants/import`): paste JSON
+or drop a `.json` file (`{ "restaurants": [...] }` or a bare array), download the template
+(`yumio-restaurants-template.json`, postable as-is; its field descriptions are shown as a
+collapsible field reference), choose *Create only* or *Create or update* and **Strict** (on: unknown
+catalog names / cities fail the row; off: they are dropped with a warning), **Validate** (a dry run
+with per-row errors / warnings), then **Import N restaurants** after a confirmation.
+
+**Ratings.** Restaurants show the app's liked percentage (`restaurant.reviewStats`): the detail
+Overview has the "87% liked" summary with the green / orange / red bar and the Liked · Fine ·
+Disliked counts, the Restaurants table a Liked column. Under App config → Review sentiments →
+"Show liked % from N reviews" (`ratingDisplay.minReviewsForPercent`, default 10) a restaurant
+shows "New" instead.
+
 ## Run
 
 ```bash

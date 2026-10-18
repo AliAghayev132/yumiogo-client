@@ -151,8 +151,14 @@ const DetailsTab = ({ review, sentiment, onRecalculate }) => {
           <span className="inline-flex items-center gap-1 text-sm font-semibold text-ink">
             <Star className="h-4 w-4 fill-star text-star" /> {review.score}
           </span>
-          <Badge tone="neutral" size="sm">
-            Visited {dateLabel(review.visitDate || review.createdAt)}
+          {/* Only a visit date the author picked — never the posting date. */}
+          {review.visitDate && (
+            <Badge tone="neutral" size="sm">
+              Visited {dateLabel(review.visitDate)}
+            </Badge>
+          )}
+          <Badge tone="neutral" size="sm" title={new Date(review.createdAt).toLocaleString('en-US')}>
+            Posted {dateLabel(review.createdAt)}
           </Badge>
           {review.isStealth && (
             <Badge tone="purple" size="sm" icon={EyeOff}>
@@ -258,7 +264,7 @@ const CommentsTab = ({ reviewId }) => {
       title: 'Delete this comment?',
       message: `${fullName(comment.user)}'s comment is removed from the review. Its replies stay visible under a “deleted” placeholder.`,
       confirmText: 'Delete comment',
-      onConfirm: () => deleteComment({ commentId: comment._id, reviewId }).unwrap(),
+      onConfirm: () => deleteComment({ commentId: comment._id, reviewId, userId: comment.user?._id }).unwrap(),
     })
     if (ok) banner.success('Comment deleted')
   }

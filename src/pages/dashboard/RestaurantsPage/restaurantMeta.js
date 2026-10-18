@@ -64,3 +64,27 @@ export const toPriceLevels = (levels = []) =>
 
 /** Active catalog city (it carries the centre coordinates) by name. */
 export const findCity = (catalog, name) => catalog?.cities?.find((c) => c.name === name) || null
+
+const reviewCount = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0)
+
+/**
+ * restaurant.reviewStats { total, liked, fine, disliked, likedPercent } → display values;
+ * `isNew` below `minReviews` (Settings.ratingDisplay.minReviewsForPercent). Falls back to
+ * `sentiment` counts (admin detail stats) when the restaurant has no reviewStats yet.
+ * null when neither is there.
+ */
+export const likedSummary = (reviewStats, minReviews, sentiment) => {
+  const source = reviewStats || sentiment
+  if (!source) return null
+  const liked = reviewCount(source.liked)
+  const fine = reviewCount(source.fine)
+  const disliked = reviewCount(source.disliked)
+  const total = reviewStats ? reviewCount(reviewStats.total) : liked + fine + disliked
+  const percent =
+    reviewStats?.likedPercent !== null && Number.isFinite(Number(reviewStats?.likedPercent))
+      ? Math.round(Number(reviewStats.likedPercent))
+      : total
+        ? Math.round((liked / total) * 100)
+        : 0
+  return { total, liked, fine, disliked, likedPercent: percent, isNew: total < minReviews }
+}

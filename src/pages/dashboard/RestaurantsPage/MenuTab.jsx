@@ -9,6 +9,8 @@ import {
   Skeleton,
   Switch,
   OrderButtons,
+  TranslationBadge,
+  documentTranslationStatus,
   useBatchedReorder,
   useBanner,
   useConfirm,
@@ -104,6 +106,7 @@ const ItemRow = ({ item, index, count, onMove, onEdit, onDelete, onToggle }) => 
     <div className="min-w-0 flex-1">
       <p className="flex flex-wrap items-center gap-1.5 text-sm font-semibold text-ink">
         <span className="truncate">{item.name}</span>
+        <TranslationBadge status={documentTranslationStatus(item, ['name', 'description'])} />
         {item.dietary?.map((d) => (
           <Badge key={d} tone="success" size="sm">
             {d}
@@ -147,6 +150,7 @@ const CategoryBlock = ({ restaurantId, category, index, count, onMove, onEditCat
         <div className="min-w-0 flex-1">
           <p className="flex flex-wrap items-center gap-2 text-sm font-bold text-ink">
             {loose ? 'Other (no category)' : category.name}
+            {!loose && <TranslationBadge status={documentTranslationStatus(category, ['name', 'description'])} />}
             <span className="font-normal text-ink-muted">· {list.length} {list.length === 1 ? 'dish' : 'dishes'}</span>
             {category.isActive === false && (
               <Badge tone="neutral" size="sm">

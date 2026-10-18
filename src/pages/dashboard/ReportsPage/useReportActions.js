@@ -76,7 +76,7 @@ export const useReportActions = () => {
       title: `Delete Report #${report.number}?`,
       message: 'The report is removed from the queue permanently. The reporter is not notified.',
       confirmText: 'Delete report',
-      onConfirm: () => deleteReport(report._id).unwrap(),
+      onConfirm: () => deleteReport({ id: report._id, report }).unwrap(),
     })
     if (!ok) return false
     banner.error(ok.result?.message || `Report #${report.number} deleted`, { duration: 5000, host: 'page' })

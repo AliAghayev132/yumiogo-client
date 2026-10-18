@@ -3,7 +3,7 @@
 Route screens, one PascalCase folder per page (`UsersPage/UsersPage.jsx` + `index.js`), grouped:
 
 - `dashboard/` — the admin panel: Dashboard, Analytics, Users (+ `UserDetailPage`), Restaurants
-  (+ `RestaurantDetailPage` with its tabs), Reviews, Reports, Settings, Broadcast, Taxonomy
+  (+ `RestaurantDetailPage` with its tabs, `ImportRestaurantsPage` for the bulk JSON import), Reviews, Reports, Settings, Broadcast, Taxonomy
   (Catalog types), Cities, App config, FAQs, Legal pages, Onboarding, Profile. Pages use the
   design system in `@components` (see its README) and the RTK Query hooks from `@store/api`.
 - `public/` — landing (`HomePage`), `LegalPage`, the share landings (`ShareLanding/`), the admin

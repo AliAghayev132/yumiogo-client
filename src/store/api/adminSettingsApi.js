@@ -17,6 +17,7 @@ const DATA_TAGS = [
   'AdminRestaurant',
   'AdminReview',
   'AdminReport',
+  'AdminList',
   'AdminTaxonomy',
   'AdminCity',
   'AdminFaq',
@@ -79,11 +80,11 @@ export const adminSettingsApi = baseApi.injectEndpoints({
     }),
 
     // How many accounts a broadcast would reach (the sending admin counts when in the audience).
-    // { segment, city? } → data: { recipients, includesYou }
+    // { segment, city?, userIds? } → data: { recipients, includesYou }
     getBroadcastAudience: builder.query({
-      query: ({ segment, city } = {}) => ({
+      query: ({ segment, city, userIds } = {}) => ({
         url: '/admin/notifications/audience',
-        params: { segment, ...(city ? { city } : {}) },
+        params: { segment, ...(city ? { city } : {}), ...(userIds?.length ? { userIds: userIds.join(',') } : {}) },
       }),
       keepUnusedDataFor: 30,
     }),

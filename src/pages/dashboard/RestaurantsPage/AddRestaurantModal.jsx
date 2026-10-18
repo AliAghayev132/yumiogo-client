@@ -1,10 +1,28 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { Plus } from 'lucide-react'
-import { Modal, Input, Select, Button, useBanner, errorMessage } from '@components'
+import {
+  Modal,
+  Select,
+  Button,
+  LanguageBar,
+  LocalizedInput,
+  TranslateButton,
+  localizedTexts,
+  toTranslationForm,
+  toTranslationPayload,
+  translationEntries,
+  translationStatus,
+  withTranslation,
+  useBanner,
+  errorMessage,
+} from '@components'
 import { useCreateRestaurantMutation, useGetMetaQuery, useGetCatalogQuery } from '@store/api'
 
-const EMPTY = { name: '', cuisine: '', address: '' }
+// Texts with az / ru versions here (the description is added later in the editor).
+const TEXTS = ['name', 'address']
+const TRANSLATE = localizedTexts(TEXTS)
+const EMPTY = { name: '', cuisine: '', address: '', translations: toTranslationForm(null, TEXTS) }
 
 /**
  * Figma modalBox 1338:4674 — "Add new restaurant": Restaurant name, Category (cuisine from the
@@ -17,6 +35,7 @@ export const AddRestaurantModal = ({ isOpen, onClose }) => {
   const banner = useBanner()
   const [form, setForm] = useState(EMPTY)
   const [errors, setErrors] = useState({})
+  const [lang, setLang] = useState('en')
   const { data: metaData, isLoading: metaLoading } = useGetMetaQuery(undefined, { skip: !isOpen })
   const { data: catalogData } = useGetCatalogQuery(undefined, { skip: !isOpen })
   const [createRestaurant, { isLoading }] = useCreateRestaurantMutation()
@@ -24,9 +43,18 @@ export const AddRestaurantModal = ({ isOpen, onClose }) => {
   const cuisines = metaData?.data?.cuisines || []
   const defaultCity = catalogData?.data?.defaultCity || null
 
+  // AZ / RU text of `field` in the selected language.
+  const tr = (field) => ({
+    lang,
+    translation: form.translations[lang]?.[field],
+    onTranslationChange: (value) =>
+      setForm((f) => ({ ...f, translations: withTranslation(f.translations, lang, field, value) })),
+  })
+
   const close = () => {
     setForm(EMPTY)
     setErrors({})
+    setLang('en')
     onClose()
   }
 
@@ -36,16 +64,21 @@ export const AddRestaurantModal = ({ isOpen, onClose }) => {
     if (!form.name.trim()) next.name = 'Restaurant name is required'
     if (cuisines.length && !form.cuisine) next.cuisine = 'Choose a category'
     setErrors(next)
-    if (Object.keys(next).length) return
+    if (Object.keys(next).length) {
+      if (next.name) setLang('en')
+      return
+    }
 
     try {
       const res = await createRestaurant({
         name: form.name.trim(),
         cuisines: form.cuisine ? [form.cuisine] : [],
         address: form.address.trim(),
+        translations: toTranslationPayload(form.translations, TEXTS),
         ...(defaultCity
           ? {
-              city: defaultCity.name,
+              // `key` is the English name restaurants store (`name` may be localized).
+              city: defaultCity.key || defaultCity.name,
               location: { type: 'Point', coordinates: [defaultCity.longitude, defaultCity.latitude] },
             }
           : {}),
@@ -72,9 +105,18 @@ export const AddRestaurantModal = ({ isOpen, onClose }) => {
       title="Add new restaurant"
       description="Fill in the basic details. You can add photos and more info after publishing."
     >
+      <Modal.HeaderActions>
+        <TranslateButton form={form} setForm={setForm} texts={TRANSLATE} onLanguageChange={setLang} />
+      </Modal.HeaderActions>
       <form onSubmit={submit} noValidate>
         <div className="flex flex-col gap-3">
-          <Input
+          <LanguageBar
+            value={lang}
+            onChange={setLang}
+            status={translationStatus(translationEntries(form, form.translations, TEXTS))}
+          />
+          <LocalizedInput
+            {...tr('name')}
             label="Restaurant name"
             placeholder="e.g. Sushi Palace"
             value={form.name}
@@ -99,7 +141,8 @@ export const AddRestaurantModal = ({ isOpen, onClose }) => {
               setErrors((er) => ({ ...er, cuisine: undefined }))
             }}
           />
-          <Input
+          <LocalizedInput
+            {...tr('address')}
             label="Location"
             placeholder="e.g. Nizami str, Baku"
             value={form.address}

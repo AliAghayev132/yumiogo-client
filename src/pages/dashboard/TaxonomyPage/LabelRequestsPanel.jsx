@@ -10,6 +10,7 @@ import {
   Table,
   TableCard,
   Tabs,
+  Textarea,
   UserCell,
   relativeDay,
   useBanner,
@@ -34,6 +35,7 @@ const fullName = (u) => [u?.firstName, u?.lastName].filter(Boolean).join(' ')
 const ApproveDialog = ({ request, groups, onClose }) => {
   const [name, setName] = useState(request.label)
   const [group, setGroup] = useState(request.group || '')
+  const [note, setNote] = useState('')
   const [touched, setTouched] = useState(false)
   const listId = useId()
   const [review, { isLoading }] = useReviewLabelRequestMutation()
@@ -45,7 +47,13 @@ const ApproveDialog = ({ request, groups, onClose }) => {
     setTouched(true)
     if (nameError) return
     try {
-      const res = await review({ id: request._id, status: 'approved', name: name.trim(), group: group.trim() }).unwrap()
+      const res = await review({
+        id: request._id,
+        status: 'approved',
+        name: name.trim(),
+        group: group.trim(),
+        note: note.trim() || undefined,
+      }).unwrap()
       banner.success(res?.message || 'Label approved — user notified')
       onClose()
     } catch (err) {
@@ -85,6 +93,16 @@ const ApproveDialog = ({ request, groups, onClose }) => {
             <option key={g} value={g} />
           ))}
         </datalist>
+        <Textarea
+          label="Note (optional)"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          maxLength={300}
+          showCount
+          rows={2}
+          placeholder="e.g. Thanks — we shortened it a little."
+          helperText="Kept with the request for other admins."
+        />
         <Modal.Footer>
           <Button variant="outline" onClick={onClose} disabled={isLoading}>
             Cancel

@@ -28,7 +28,7 @@ export const useListActions = () => {
         maxLength: 500,
       },
       confirmText: 'Remove list',
-      onConfirm: (reason) => removeList({ id: list._id, reason }).unwrap(),
+      onConfirm: (reason) => removeList({ id: list._id, reason, ownerId: list.owner?._id }).unwrap(),
     })
     if (!ok) return false
     // Figma: deletions report in the red snackbar.

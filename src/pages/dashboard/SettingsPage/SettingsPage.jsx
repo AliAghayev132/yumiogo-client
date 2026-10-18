@@ -8,11 +8,20 @@ import {
   ConfirmDialog,
   EmptyState,
   Input,
+  LanguageTabs,
+  LocalizedTextarea,
   Select,
   Skeleton,
   SwitchRow,
-  Textarea,
+  TranslateButton,
+  localizedTexts,
   formatNumber,
+  languageNote,
+  toTranslationForm,
+  toTranslationPayload,
+  translationEntries,
+  translationStatus,
+  withTranslation,
   useBanner,
   useConfirm,
   errorMessage,
@@ -278,16 +287,32 @@ const useSettingToggle = (settings) => {
   return { valueOf, save, isPending: (key) => key in pending }
 }
 
+// The maintenance message also has az / ru versions (Settings.translations; the other root
+// texts there are edited in App config, and the server merges per field).
+const MAINTENANCE_TEXTS = ['maintenanceMessage']
+const MAINTENANCE_TRANSLATE = localizedTexts(MAINTENANCE_TEXTS)
+// Remount key: the saved message in every language.
+const maintenanceKey = (settings) =>
+  JSON.stringify([settings.maintenanceMessage || '', toTranslationForm(settings.translations, MAINTENANCE_TEXTS)])
+
 const MaintenanceMessage = ({ settings }) => {
   const [updateSettings, { isLoading: saving }] = useUpdateAdminSettingsMutation()
   const banner = useBanner()
   const saved = settings.maintenanceMessage || ''
-  const [message, setMessage] = useState(saved)
-  const dirty = message.trim() !== saved
+  const savedTranslations = toTranslationForm(settings.translations, MAINTENANCE_TEXTS)
+  const [form, setForm] = useState({ maintenanceMessage: saved, translations: savedTranslations })
+  const { maintenanceMessage: message, translations } = form
+  const [lang, setLang] = useState('en')
+  const translationPayload = toTranslationPayload(translations, MAINTENANCE_TEXTS)
+  const dirty =
+    message.trim() !== saved ||
+    JSON.stringify(translationPayload) !== JSON.stringify(toTranslationPayload(savedTranslations, MAINTENANCE_TEXTS))
+
+  const cancel = () => setForm({ maintenanceMessage: saved, translations: savedTranslations })
 
   const save = async () => {
     try {
-      await updateSettings({ maintenanceMessage: message.trim() }).unwrap()
+      await updateSettings({ maintenanceMessage: message.trim(), translations: translationPayload }).unwrap()
       banner.success('Maintenance message saved')
     } catch (err) {
       banner.error(errorMessage(err, 'Could not save the message'))
@@ -296,10 +321,30 @@ const MaintenanceMessage = ({ settings }) => {
 
   return (
     <div className="flex flex-col gap-2 px-3 pb-1.5 pt-1">
-      <Textarea
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs leading-4 text-ink-muted">{languageNote(lang)}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <TranslateButton form={form} setForm={setForm} texts={MAINTENANCE_TRANSLATE} onLanguageChange={setLang} />
+          <LanguageTabs
+            value={lang}
+            onChange={setLang}
+            status={translationStatus(translationEntries(form, translations, MAINTENANCE_TEXTS))}
+          />
+        </div>
+      </div>
+      <LocalizedTextarea
+        lang={lang}
+        translation={translations[lang]?.maintenanceMessage}
+        onTranslationChange={(value) =>
+          setForm((f) => ({ ...f, translations: withTranslation(f.translations, lang, 'maintenanceMessage', value) }))
+        }
+        translationHint="Optional — empty uses English. Shown on the app's maintenance screen."
         label="Maintenance message"
         value={message}
-        onChange={(e) => setMessage(e.target.value)}
+        onChange={(e) => {
+          const value = e.target.value
+          setForm((f) => ({ ...f, maintenanceMessage: value }))
+        }}
         rows={2}
         maxLength={MAINTENANCE_MESSAGE_MAX}
         showCount
@@ -311,7 +356,7 @@ const MaintenanceMessage = ({ settings }) => {
           <Button size="sm" onClick={save} loading={saving}>
             Save message
           </Button>
-          <Button size="sm" variant="outline" onClick={() => setMessage(saved)} disabled={saving}>
+          <Button size="sm" variant="outline" onClick={cancel} disabled={saving}>
             Cancel
           </Button>
         </div>
@@ -366,7 +411,7 @@ const ModerationSettings = ({ settings }) => {
           disabled={toggle.isPending('maintenanceMode')}
           onChange={setMaintenance}
         />
-        <MaintenanceMessage key={settings.maintenanceMessage || ''} settings={settings} />
+        <MaintenanceMessage key={maintenanceKey(settings)} settings={settings} />
       </div>
     </SettingsCard>
   )

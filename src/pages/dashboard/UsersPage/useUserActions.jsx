@@ -1,4 +1,4 @@
-import { AlertTriangle, Ban, RotateCcw, UserCheck, PauseCircle, Shield, ShieldOff, Trash2 } from 'lucide-react'
+import { AlertTriangle, Ban, Hourglass, RotateCcw, UserCheck, PauseCircle, Shield, ShieldOff, Trash2 } from 'lucide-react'
 import { useBanner, useConfirm, errorMessage } from '@components'
 import {
   useWarnUserMutation,
@@ -8,6 +8,7 @@ import {
   useApproveUserMutation,
   useVerifyUserMutation,
   useSetUserRoleMutation,
+  useUpdateUserMutation,
   useDeleteUserMutation,
   useRemoveUserWarningMutation,
 } from '@store/api'
@@ -30,6 +31,7 @@ export const useUserActions = () => {
   const [approveUser] = useApproveUserMutation()
   const [verifyUser] = useVerifyUserMutation()
   const [setUserRole] = useSetUserRoleMutation()
+  const [updateUser] = useUpdateUserMutation()
   const [deleteUser] = useDeleteUserMutation()
   const [removeUserWarning] = useRemoveUserWarningMutation()
 
@@ -74,14 +76,18 @@ export const useUserActions = () => {
     return !!ok
   }
 
+  // Also changes the length of a running suspension (the server sets a new end date).
   const suspend = async (user) => {
     const name = fullName(user)
     const choice = { days: '7' }
+    const again = user.status === 'suspended'
     const ok = await confirm({
       tone: 'warning',
       icon: PauseCircle,
-      title: `Suspend ${name}?`,
-      message: 'This user will lose access to Yumio until the suspension ends and receive a notification.',
+      title: again ? `Change ${name}'s suspension?` : `Suspend ${name}?`,
+      message: again
+        ? 'The suspension restarts with the new length and reason. The user receives a notification.'
+        : 'This user will lose access to Yumio until the suspension ends and receive a notification.',
       children: <SuspendLength initial={choice.days} onChange={(days) => (choice.days = days)} />,
       reasonField: { label: 'Reason for suspension', placeholder: 'e.g. Spam reviews...', maxLength: 500 },
       confirmText: 'Suspend user',
@@ -118,6 +124,21 @@ export const useUserActions = () => {
       onConfirm: () => approveUser(user._id).unwrap(),
     })
     if (ok) report('success', ok.result?.message || `${name} has been approved`)
+    return !!ok
+  }
+
+  // Back to "waiting for approval" (any status → pending): signed out, cannot sign in until approved.
+  const toPending = async (user) => {
+    const name = fullName(user)
+    const ok = await confirm({
+      tone: 'warning',
+      icon: Hourglass,
+      title: `Move ${name} back to pending?`,
+      message: 'The account is signed out and cannot sign in again until an admin approves it. The user is not notified.',
+      confirmText: 'Move to pending',
+      onConfirm: () => updateUser({ id: user._id, status: 'pending' }).unwrap(),
+    })
+    if (ok) report('warning', `${name} is waiting for approval again`)
     return !!ok
   }
 
@@ -177,5 +198,5 @@ export const useUserActions = () => {
     return !!ok
   }
 
-  return { warn, ban, suspend, restore, approve, verify, setRole, remove, removeWarning }
+  return { warn, ban, suspend, restore, approve, toPending, verify, setRole, remove, removeWarning }
 }

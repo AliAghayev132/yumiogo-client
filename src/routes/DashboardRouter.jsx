@@ -15,6 +15,7 @@ import {
   UserDetailPage,
   RestaurantsPage,
   RestaurantDetailPage,
+  ImportRestaurantsPage,
   ReviewsPage,
   ReportsPage,
   ListsPage,
@@ -54,6 +55,7 @@ export const DashboardRouter = () => (
       <Route path="users" element={<UsersPage />} />
       <Route path="users/:id" element={<UserDetailPage />} />
       <Route path="restaurants" element={<RestaurantsPage />} />
+      <Route path="restaurants/import" element={<ImportRestaurantsPage />} />
       <Route path="restaurants/:id" element={<RestaurantDetailPage />} />
       <Route path="reviews" element={<ReviewsPage />} />
       <Route path="reports" element={<ReportsPage />} />

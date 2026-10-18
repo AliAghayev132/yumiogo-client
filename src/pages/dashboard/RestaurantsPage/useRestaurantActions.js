@@ -1,4 +1,4 @@
-import { Ban, Check, RotateCcw, Trash2, X } from 'lucide-react'
+import { Ban, Check, Hourglass, RotateCcw, Trash2, X } from 'lucide-react'
 import { useBanner, useConfirm, errorMessage } from '@components'
 import {
   useApproveRestaurantMutation,
@@ -7,6 +7,7 @@ import {
   useRestoreRestaurantMutation,
   useDeleteRestaurantMutation,
   usePurgeRestaurantMutation,
+  useSetRestaurantStatusMutation,
 } from '@store/api'
 
 /**
@@ -25,6 +26,7 @@ export const useRestaurantActions = () => {
   const [restoreRestaurant] = useRestoreRestaurantMutation()
   const [deleteRestaurant] = useDeleteRestaurantMutation()
   const [purgeRestaurant] = usePurgeRestaurantMutation()
+  const [setRestaurantStatus] = useSetRestaurantStatusMutation()
 
   // Results go to the page outlet (the confirm dialog is closing at this point).
   const report = (tone, message, extra) =>
@@ -43,12 +45,16 @@ export const useRestaurantActions = () => {
     return !!ok
   }
 
+  // Pending, live or suspended listings can be rejected (a live one is taken down).
   const reject = async (r) => {
     const ok = await confirm({
       tone: 'danger',
       icon: X,
       title: `Reject ${r.name}?`,
-      message: 'This restaurant listing will be rejected and not published.',
+      message:
+        r.status === 'pending'
+          ? 'This restaurant listing will be rejected and not published.'
+          : 'This restaurant will be taken down and hidden from the app.',
       reasonField: {
         label: 'Reason for rejection',
         placeholder: 'e.g. Incomplete information provided...',
@@ -63,12 +69,16 @@ export const useRestaurantActions = () => {
     return !!ok
   }
 
+  // Live or pending listings can be suspended.
   const suspend = async (r) => {
     const ok = await confirm({
       tone: 'danger',
       icon: Ban,
       title: `Suspend ${r.name}?`,
-      message: 'This restaurant will be hidden from the app until it is restored.',
+      message:
+        r.status === 'pending'
+          ? 'This listing will stay hidden from the app until it is restored.'
+          : 'This restaurant will be hidden from the app until it is restored.',
       reasonField: { label: 'Reason for suspension', placeholder: 'e.g. Health inspection pending...', maxLength: 500 },
       confirmText: 'Suspend',
       onConfirm: (reason) => suspendRestaurant({ id: r._id, reason }).unwrap(),
@@ -87,6 +97,20 @@ export const useRestaurantActions = () => {
       onConfirm: () => restoreRestaurant(r._id).unwrap(),
     })
     if (ok) report('success', ok.result?.message || `${r.name} has been restored`)
+    return !!ok
+  }
+
+  // Back to the approval queue (PATCH /admin/restaurants/:id/status — any status is allowed there).
+  const toPending = async (r) => {
+    const ok = await confirm({
+      tone: 'warning',
+      icon: Hourglass,
+      title: `Move ${r.name} back to pending?`,
+      message: 'The listing is hidden from the app until it is approved again.',
+      confirmText: 'Move to pending',
+      onConfirm: () => setRestaurantStatus({ id: r._id, status: 'pending' }).unwrap(),
+    })
+    if (ok) report('warning', `${r.name} is waiting for approval`)
     return !!ok
   }
 
@@ -135,5 +159,5 @@ export const useRestaurantActions = () => {
     return !!ok
   }
 
-  return { approve, reject, suspend, restore, remove, purge }
+  return { approve, reject, suspend, restore, toPending, remove, purge }
 }

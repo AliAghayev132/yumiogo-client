@@ -8,5 +8,8 @@
   `app:maintenance`, and sign out on `account:status` (suspended / banned).
 - `useSentiments()` — review sentiments (label, emoji, colour) from Settings, with
   `DEFAULT_SENTIMENTS` / `mergeSentiments` as fallbacks.
+- `useRatingDisplay()` — `{ minReviewsForPercent }` from Settings.ratingDisplay (default
+  `DEFAULT_MIN_REVIEWS_FOR_PERCENT` = 10): below it a restaurant shows "New" instead of its
+  liked %.
 
 Hooks are named `useXxx.js`, export `useXxx` (and a default) and are re-exported from `index.js`.

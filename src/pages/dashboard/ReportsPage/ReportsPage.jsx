@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useSearchParams } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import { Plus, Trash2 } from 'lucide-react'
 import {
   Badge,
@@ -154,7 +154,19 @@ export const ReportsPage = () => {
             ) : reports.length ? (
               reports.map((report) => (
                 <Table.Row key={report._id}>
-                  <Table.Cell nowrap>{shortName(report.reporter)}</Table.Cell>
+                  <Table.Cell nowrap>
+                    {report.reporter?._id ? (
+                      <Link
+                        to={`/dashboard/users/${report.reporter._id}`}
+                        className="outline-none hover:underline focus-visible:underline"
+                        title="Open the reporter's profile"
+                      >
+                        {shortName(report.reporter)}
+                      </Link>
+                    ) : (
+                      shortName(report.reporter)
+                    )}
+                  </Table.Cell>
                   <Table.Cell>
                     <StatusPill status={report.targetType} entity="reportType" tone={TYPE_TONES[report.targetType]} />
                   </Table.Cell>

@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { clsx } from 'clsx'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 
@@ -23,6 +24,10 @@ const chip =
  * Props: page (1-based), total (item count), limit (page size), pages (optional; derived
  * from total/limit), onPageChange(page), itemLabel (optional noun: "Showing 1–10 of 42 users"),
  * bordered (top divider, default true — off when TableCard already draws it), className.
+ *
+ * When the page is past the last one (the last row of the last page was removed, approved
+ * away from a status tab, …) it calls onPageChange(lastPage) so the table never sits on an
+ * empty page. Only while `total` > 0: an unloaded / empty list keeps the caller's page.
  */
 export const Pagination = ({
   page = 1,
@@ -39,6 +44,12 @@ export const Pagination = ({
   const from = total === 0 ? 0 : (current - 1) * limit + 1
   const to = Math.min(current * limit, total)
   const go = (p) => p !== current && p >= 1 && p <= pageCount && onPageChange?.(p)
+
+  // Clamp the caller's page state, not only the chips (see above).
+  const pastEnd = total > 0 && page > pageCount
+  useEffect(() => {
+    if (pastEnd) onPageChange?.(pageCount)
+  }, [pastEnd, pageCount, onPageChange])
 
   return (
     <nav

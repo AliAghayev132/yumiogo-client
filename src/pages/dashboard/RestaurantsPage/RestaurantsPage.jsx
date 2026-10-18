@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router'
-import { Plus, Pencil, Trash2, Star, Store, SearchX } from 'lucide-react'
+import { Plus, Pencil, Trash2, Store, SearchX, FileUp } from 'lucide-react'
 import {
   TableCard,
   Table,
@@ -17,8 +17,10 @@ import {
 } from '@components'
 import { useGetAdminRestaurantsQuery, useExportRestaurantsMutation, useGetMetaQuery } from '@store/api'
 import { saveTextFile } from '@utils'
+import { useRatingDisplay } from '@store/hooks'
 import { AddRestaurantModal } from './AddRestaurantModal'
 import { useRestaurantActions } from './useRestaurantActions'
+import { LikedCell } from './RatingSummary'
 import { RESTAURANT_STATUS_TABS, RESTAURANT_TABS, RESTAURANT_SORTS } from './restaurantMeta'
 
 // Figma: "Showing 1–11 of 1,204".
@@ -76,7 +78,8 @@ const RowActions = ({ r, trash, actions, onEdit }) => {
 
 /**
  * Restaurants (Figma 1285:9619 / 1343:26926): "All restaurants" table card with Export / Filter /
- * + Add restaurants, status tabs (incl. Trash) with counts, status-dependent row actions,
+ * Import restaurants (→ /dashboard/restaurants/import) / + Add restaurants, a liked % column
+ * ("New" under Settings.ratingDisplay.minReviewsForPercent, star average below), status tabs (incl. Trash) with counts, status-dependent row actions,
  * numbered pagination and the header search. Links: ?status=pending, ?restaurant=<id> (opens
  * the restaurant page).
  */
@@ -118,6 +121,7 @@ export const RestaurantsPage = () => {
   const [exportRestaurants, { isLoading: exporting }] = useExportRestaurantsMutation()
   const actions = useRestaurantActions()
   const banner = useBanner()
+  const { minReviewsForPercent } = useRatingDisplay()
 
   const restaurants = data?.data?.restaurants || []
   const pagination = data?.data?.pagination || { total: 0 }
@@ -171,6 +175,9 @@ export const RestaurantsPage = () => {
               Export
             </Button>
             <FilterMenu filters={filterGroups} value={filters} onChange={setFilters} />
+            <Button size="sm" variant="outline" leftIcon={FileUp} onClick={() => navigate('/dashboard/restaurants/import')}>
+              Import restaurants
+            </Button>
             <Button size="sm" leftIcon={Plus} onClick={() => setAdding(true)}>
               Add restaurants
             </Button>
@@ -194,7 +201,7 @@ export const RestaurantsPage = () => {
               <Table.Head>Restaurant</Table.Head>
               <Table.Head>Category</Table.Head>
               <Table.Head>Location</Table.Head>
-              <Table.Head>Rating</Table.Head>
+              <Table.Head>Liked</Table.Head>
               <Table.Head>Reviews</Table.Head>
               <Table.Head>Status</Table.Head>
               <Table.Head>Actions</Table.Head>
@@ -227,10 +234,7 @@ export const RestaurantsPage = () => {
                     {r.city || <span className="text-ink-disabled">—</span>}
                   </Table.Cell>
                   <Table.Cell nowrap>
-                    <span className="inline-flex items-center gap-2">
-                      <Star className="h-4 w-4 fill-star text-star" />
-                      {r.reviewCount ? Number(r.rating || 0).toFixed(1) : '—'}
-                    </span>
+                    <LikedCell restaurant={r} minReviews={minReviewsForPercent} />
                   </Table.Cell>
                   <Table.Cell>{formatNumber(r.reviewCount ?? 0)}</Table.Cell>
                   <Table.Cell nowrap>

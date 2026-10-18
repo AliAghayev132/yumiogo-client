@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { useSelector } from 'react-redux'
 import {
@@ -17,6 +18,10 @@ import {
   PauseCircle,
   Ban,
   ChevronRight,
+  Hourglass,
+  Megaphone,
+  RotateCcw,
+  UserCheck,
 } from 'lucide-react'
 import {
   Avatar,
@@ -39,20 +44,53 @@ import { useGetAdminUserQuery } from '@store/api'
 import { formatDateTime } from '@utils'
 import { useUserActions } from './useUserActions'
 import { fullName } from './userMeta'
+import { ConnectionsModal } from './ConnectionsModal'
+import { InvitesCard, ProfileCard, SessionsCard, SettingsCard } from './UserProfileCards'
+import { CommentsCard, FiledReportsCard } from './UserActivityCards'
 
 const row = 'flex items-center gap-3 px-[18px] py-3'
 const linkRow = `${row} transition-colors hover:bg-canvas`
 
-const SectionList = ({ title, subtitle, empty, children, count }) => (
-  <ChartCard title={title} subtitle={subtitle} divider className="pb-2" bodyClassName="-mx-[18px]">
+const SectionList = ({ title, subtitle, empty, children, count, actions }) => (
+  <ChartCard title={title} subtitle={subtitle} actions={actions} divider className="pb-2" bodyClassName="-mx-[18px]">
     {count ? <div className="flex flex-col">{children}</div> : <EmptyState compact title={empty} className="py-6" />}
   </ChartCard>
 )
 
+// "View all" in a card header → the full, filtered table.
+const ViewAll = ({ to, label }) => (
+  <Link to={to} className="inline-flex items-center gap-1 text-xs font-semibold text-brand-hover hover:underline">
+    {label || 'View all'} <ChevronRight className="h-3 w-3" />
+  </Link>
+)
+
+/**
+ * Status changes the server allows (ModerationService.setUserStatus: any status → any other,
+ * never your own) beyond the header buttons, for the ⋮ menu.
+ */
+const statusMenuItems = (user, actions) => {
+  const items = []
+  const { status } = user
+  if (status === 'pending') items.push({ label: 'Approve', icon: UserCheck, onSelect: () => actions.approve(user) })
+  if (status === 'suspended' || status === 'banned') {
+    items.push({ label: 'Restore access', icon: RotateCcw, onSelect: () => actions.restore(user) })
+  }
+  items.push({
+    label: status === 'suspended' ? 'Change suspension…' : 'Suspend…',
+    icon: PauseCircle,
+    onSelect: () => actions.suspend(user),
+  })
+  if (status !== 'banned') items.push({ label: 'Ban…', icon: Ban, onSelect: () => actions.ban(user) })
+  if (status !== 'pending') items.push({ label: 'Move to pending', icon: Hourglass, onSelect: () => actions.toPending(user) })
+  return items
+}
+
 /**
  * Full user profile (/dashboard/users/:id) — "Go to full profile" from the quick view: account
- * status and moderation history, counters, warnings (removable), latest reviews, lists and the
- * reports filed against the user, with every moderation action.
+ * status and moderation history, counters (followers / following open the lists), profile data,
+ * app settings, invites, devices, warnings (removable), latest reviews and lists (with "View all"),
+ * reports against and filed by the user, comments, with every moderation action and
+ * "Notify this user" (Broadcast addressed to the account).
  */
 export const UserDetailPage = () => {
   const { id } = useParams()
@@ -60,6 +98,8 @@ export const UserDetailPage = () => {
   const { data, isLoading, isError, error, refetch } = useGetAdminUserQuery(id)
   const actions = useUserActions()
   const selfId = useSelector((s) => s.auth.user?._id || s.auth.user?.id)
+  // Followers / Following modal tab (null = closed).
+  const [connections, setConnections] = useState(null)
 
   const back = (
     <Link to="/dashboard/users" className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-muted hover:text-ink">
@@ -110,8 +150,7 @@ export const UserDetailPage = () => {
     { label: user.verified ? 'Remove verified badge' : 'Add verified badge', icon: BadgeCheck, onSelect: () => actions.verify(user) },
   ]
   if (!isSelf) {
-    if (user.status === 'active') menu.push({ label: 'Suspend…', icon: PauseCircle, onSelect: () => actions.suspend(user) })
-    if (user.status === 'pending' || user.status === 'suspended') menu.push({ label: 'Ban…', icon: Ban, onSelect: () => actions.ban(user) })
+    menu.push({ divider: true }, ...statusMenuItems(user, actions), { divider: true })
     menu.push({
       label: user.role === 'admin' ? 'Remove admin access' : 'Make admin',
       icon: user.role === 'admin' ? ShieldOff : Shield,
@@ -131,10 +170,10 @@ export const UserDetailPage = () => {
   }
 
   const statCards = [
-    { key: 'reviews', icon: MessageSquareMore, tone: 'purple', label: 'Reviews', value: stats.reviews },
-    { key: 'lists', icon: Bookmark, tone: 'pink', label: 'Lists', value: stats.lists },
-    { key: 'followers', icon: Users, tone: 'blue', label: 'Followers', value: stats.followers },
-    { key: 'following', icon: UserPlus, tone: 'green', label: 'Following', value: stats.following },
+    { key: 'reviews', icon: MessageSquareMore, tone: 'purple', label: 'Reviews', value: stats.reviews, onClick: () => navigate(`/dashboard/reviews?user=${user._id}`) },
+    { key: 'lists', icon: Bookmark, tone: 'pink', label: 'Lists', value: stats.lists, onClick: () => navigate(`/dashboard/lists?owner=${user._id}`) },
+    { key: 'followers', icon: Users, tone: 'blue', label: 'Followers', value: stats.followers, onClick: () => setConnections('followers') },
+    { key: 'following', icon: UserPlus, tone: 'green', label: 'Following', value: stats.following, onClick: () => setConnections('following') },
     { key: 'warnings', icon: AlertTriangle, tone: 'amber', label: 'Warnings', value: stats.warnings },
     { key: 'reports', icon: Flag, tone: 'red', label: 'Reports against', value: stats.reportsAgainst },
   ]
@@ -155,8 +194,9 @@ export const UserDetailPage = () => {
           </div>
           <p className="mt-1 truncate text-sm text-ink-muted">
             {user.email}
+            {user.phone ? ` · ${user.phone}` : ''}
             {user.city ? ` · ${user.city}` : ''} · Joined {monthYear(user.createdAt)}
-            {user.lastLogin ? ` · Last sign-in ${timeAgo(user.lastLogin)}` : ''}
+            {user.lastLogin ? ` · Last sign-in ${timeAgo(user.lastLogin)}` : ' · Never signed in'}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -178,6 +218,16 @@ export const UserDetailPage = () => {
           {!isSelf && blocked && (
             <Button size="sm" variant="success" onClick={() => actions.restore(user)}>
               Restore access
+            </Button>
+          )}
+          {user.status === 'active' && (
+            <Button
+              size="sm"
+              variant="outline"
+              leftIcon={Megaphone}
+              onClick={() => navigate(`/dashboard/broadcast?user=${user._id}`)}
+            >
+              Notify this user
             </Button>
           )}
           <DropdownMenu trigger={<IconButton icon={MoreVertical} label="More actions" variant="secondary" />} items={menu} />
@@ -205,6 +255,12 @@ export const UserDetailPage = () => {
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <ProfileCard user={user} />
+        <div className="flex flex-col gap-6">
+          <SettingsCard user={user} />
+          <InvitesCard user={user} stats={stats} />
+        </div>
+
         <SectionList
           title="Warnings"
           subtitle={`${formatNumber(warnings.length)} in total`}
@@ -231,6 +287,7 @@ export const UserDetailPage = () => {
           subtitle={`${formatNumber(stats.reviews || 0)} in total`}
           empty="No reviews yet"
           count={recentReviews.length}
+          actions={stats.reviews > 0 && <ViewAll to={`/dashboard/reviews?user=${user._id}`} />}
         >
           {recentReviews.map((r) => (
             <Link key={r._id} to={`/dashboard/reviews?review=${r._id}`} className={linkRow}>
@@ -248,7 +305,13 @@ export const UserDetailPage = () => {
           ))}
         </SectionList>
 
-        <SectionList title="Lists" subtitle={`${formatNumber(stats.lists || 0)} in total`} empty="No lists yet" count={lists.length}>
+        <SectionList
+          title="Lists"
+          subtitle={`${formatNumber(stats.lists || 0)} in total`}
+          empty="No lists yet"
+          count={lists.length}
+          actions={stats.lists > 0 && <ViewAll to={`/dashboard/lists?owner=${user._id}`} />}
+        >
           {lists.map((l) => (
             <Link key={l._id} to={`/dashboard/lists?list=${l._id}`} className={linkRow}>
               <Bookmark className="h-5 w-5 shrink-0 text-pink" />
@@ -266,7 +329,7 @@ export const UserDetailPage = () => {
 
         <SectionList
           title="Reports against this user"
-          subtitle={`${formatNumber(stats.reportsAgainst || 0)} received · ${formatNumber(stats.reportsFiled || 0)} filed`}
+          subtitle={`${formatNumber(stats.reportsAgainst || 0)} in total`}
           empty="No reports"
           count={reports.length}
         >
@@ -279,7 +342,7 @@ export const UserDetailPage = () => {
                   {r.reason}
                 </p>
                 <p className="truncate text-xs text-ink-muted">
-                  {r.reporter ? `By ${fullName(r.reporter)}` : 'Anonymous'}
+                  {r.reporter ? `By ${fullName(r.reporter)}` : 'System'}
                   {r.description ? ` · ${r.description}` : ''}
                 </p>
               </div>
@@ -288,7 +351,19 @@ export const UserDetailPage = () => {
             </Link>
           ))}
         </SectionList>
+
+        <FiledReportsCard userId={user._id} total={stats.reportsFiled} />
+        <CommentsCard userId={user._id} total={stats.comments} />
+        <SessionsCard userId={user._id} />
       </div>
+
+      <ConnectionsModal
+        user={user}
+        stats={stats}
+        kind={connections}
+        onKindChange={setConnections}
+        onClose={() => setConnections(null)}
+      />
     </div>
   )
 }

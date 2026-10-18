@@ -17,6 +17,22 @@ const REVIEW_WRITE_TAGS = [
   'AdminStats',
 ]
 
+const idOf = (value) => (value && typeof value === 'object' ? value._id : value) || null
+
+/**
+ * The review's restaurant detail (rating, latest reviews) and author detail (review count) —
+ * ids from the response, else from the { restaurantId, userId } hints the caller passes.
+ */
+const reviewDetailTags = (result, arg = {}) => {
+  const review = result?.data?.review || {}
+  const restaurantId = idOf(review.restaurant) || arg.restaurantId
+  const userId = idOf(review.user) || arg.userId
+  return [
+    ...(restaurantId ? [{ type: 'AdminRestaurant', id: String(restaurantId) }] : []),
+    ...(userId ? [{ type: 'AdminUser', id: String(userId) }] : []),
+  ]
+}
+
 // Review labels are the catalog type "reviewLabel": writes refresh the
 // taxonomy lists, the public catalog snapshot and the label-request queue.
 const LABEL_TAGS = [{ type: 'AdminTaxonomy', id: 'LIST' }, { type: 'AdminTaxonomy', id: 'REVIEW_LABELS' }, 'Catalog']
@@ -45,21 +61,35 @@ export const adminReviewsApi = baseApi.injectEndpoints({
       query: ({ id, ...params }) => ({ url: `/admin/reviews/${id}/comments`, params }),
       providesTags: (result, error, { id }) => [{ type: 'AdminReview', id: `COMMENTS-${id}` }],
     }),
-    // { id, status: pending|approved|flagged|rejected, reason? } → data: { review }
-    // message: "Review #N approved — user notified"
+    // { id, status: pending|approved|flagged|rejected, reason?, restaurantId?, userId? (cache hints,
+    // not sent) } → data: { review }; message: "Review #N approved — user notified"
     setReviewStatus: builder.mutation({
-      query: ({ id, ...body }) => ({ url: `/admin/reviews/${id}`, method: 'PATCH', body }),
-      invalidatesTags: (result, error, { id }) => [{ type: 'AdminReview', id }, ...REVIEW_WRITE_TAGS],
+      query: ({ id, status, reason }) => ({ url: `/admin/reviews/${id}`, method: 'PATCH', body: { status, reason } }),
+      invalidatesTags: (result, error, arg) => [
+        { type: 'AdminReview', id: arg.id },
+        ...REVIEW_WRITE_TAGS,
+        ...reviewDetailTags(result, arg),
+      ],
     }),
-    // { id, reason? } → data: { review: { _id, number } }; message "Review #N deleted — user notified"
+    // { id, reason?, restaurantId?, userId? } → data: { review: { _id, number } } (soft delete);
+    // message "Review #N deleted — user notified"
     deleteModerationReview: builder.mutation({
       query: ({ id, reason }) => ({ url: `/admin/reviews/${id}`, method: 'DELETE', body: { reason } }),
-      invalidatesTags: (result, error, { id }) => [{ type: 'AdminReview', id }, ...REVIEW_WRITE_TAGS],
+      invalidatesTags: (result, error, arg) => [
+        { type: 'AdminReview', id: arg.id },
+        ...REVIEW_WRITE_TAGS,
+        ...reviewDetailTags(result, arg),
+      ],
     }),
     // { restaurant? } → data: { restaurants, updated } | { restaurant, summary }
+    // One restaurant refreshes its detail; "all" refreshes every cached restaurant detail.
     recomputeRatings: builder.mutation({
       query: (body = {}) => ({ url: '/admin/reviews/recompute', method: 'POST', body }),
-      invalidatesTags: [{ type: 'AdminRestaurant', id: 'LIST' }, 'AdminStats'],
+      invalidatesTags: (result, error, body = {}) => [
+        body.restaurant ? { type: 'AdminRestaurant', id: String(body.restaurant) } : 'AdminRestaurant',
+        { type: 'AdminRestaurant', id: 'LIST' },
+        'AdminStats',
+      ],
     }),
     // Same filters as the list → { csv, filename } (save with utils/saveTextFile).
     exportModerationReviews: builder.mutation({
@@ -68,13 +98,19 @@ export const adminReviewsApi = baseApi.injectEndpoints({
     }),
 
     // Comment moderation (comment author, review author or admin may delete).
+    // { commentId, reviewId?, userId? (the author — refreshes their comment list) }
     // → data: { comment: { _id }, commentCount }
     deleteReviewComment: builder.mutation({
       query: ({ commentId }) => ({ url: `/comments/${commentId}`, method: 'DELETE' }),
-      invalidatesTags: (result, error, { reviewId }) => [
-        { type: 'AdminReview', id: `COMMENTS-${reviewId}` },
-        { type: 'AdminReview', id: reviewId },
+      invalidatesTags: (result, error, { reviewId, userId }) => [
+        ...(reviewId
+          ? [
+              { type: 'AdminReview', id: `COMMENTS-${reviewId}` },
+              { type: 'AdminReview', id: reviewId },
+            ]
+          : []),
         { type: 'AdminReview', id: 'LIST' },
+        ...(userId ? [{ type: 'AdminUser', id: String(userId) }] : []),
       ],
     }),
 
@@ -94,12 +130,13 @@ export const adminReviewsApi = baseApi.injectEndpoints({
       query: (params = {}) => ({ url: '/admin/review-labels', params }),
       providesTags: [{ type: 'AdminTaxonomy', id: 'REVIEW_LABELS' }, { type: 'AdminReview', id: 'LIST' }],
     }),
-    // { name, group?, emoji?, icon?, color?, description?, order?, isActive? } → 201 data: { item }
+    // { name, group?, emoji?, icon?, color?, description?, order?, isActive?, translations? }
+    // → 201 data: { item }
     createReviewLabel: builder.mutation({
       query: (body) => ({ url: '/admin/review-labels', method: 'POST', body }),
       invalidatesTags: LABEL_TAGS,
     }),
-    // { id, ...fields } → data: { item, cascaded }
+    // { id, ...fields, translations? } → data: { item, cascaded }
     updateReviewLabel: builder.mutation({
       query: ({ id, ...body }) => ({ url: `/admin/review-labels/${id}`, method: 'PUT', body }),
       invalidatesTags: [...LABEL_TAGS, { type: 'AdminReview', id: 'LIST' }],

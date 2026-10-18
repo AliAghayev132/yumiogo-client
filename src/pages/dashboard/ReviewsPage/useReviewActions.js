@@ -7,6 +7,9 @@ import {
 } from '@store/api'
 
 const label = (review) => (review?.number ? `Review #${review.number}` : 'this review')
+const idOf = (value) => (value && typeof value === 'object' ? value._id : value) || undefined
+// Cache hints: the restaurant and author detail pages refresh after the write.
+const hints = (review) => ({ restaurantId: idOf(review.restaurant), userId: idOf(review.user) })
 
 /**
  * Review moderation flows (Figma modalBoxes 1352:6577 approve, 1352:6486 delete) shared by
@@ -24,7 +27,8 @@ export const useReviewActions = () => {
   const changeStatus = async (review, status, options, fallback, tone = 'success') => {
     const ok = await confirm({
       ...options,
-      onConfirm: (reason) => setStatus({ id: review._id, status, reason: reason || undefined }).unwrap(),
+      onConfirm: (reason) =>
+        setStatus({ id: review._id, status, reason: reason || undefined, ...hints(review) }).unwrap(),
     })
     if (!ok) return false
     banner[tone](ok.result?.message || fallback)
@@ -108,15 +112,16 @@ export const useReviewActions = () => {
       tone: 'danger',
       icon: Trash2,
       title: `Delete ${label(review)}?`,
-      message: 'This review will be permanently deleted. The user will be notified with the reason.',
-      notice: 'Restaurant rating will be recalculated after deletion.',
+      message:
+        'This review will be removed from the app and its open reports resolved. The user will be notified with the reason.',
+      notice: 'Restaurant rating will be recalculated after deletion. The review stays in the admin records.',
       confirmText: 'Delete review',
       reasonField: {
         label: 'Reason for deletion',
         placeholder: 'e.g. Violates community guidelines...',
         maxLength: 500,
       },
-      onConfirm: (reason) => deleteReview({ id: review._id, reason: reason || undefined }).unwrap(),
+      onConfirm: (reason) => deleteReview({ id: review._id, reason: reason || undefined, ...hints(review) }).unwrap(),
     })
     if (!ok) return false
     // Figma 1352:6614: the "deleted" snackbar is red.

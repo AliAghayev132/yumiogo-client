@@ -46,6 +46,15 @@ const unlockScroll = () => {
 // (e.g. inside a <form> that wraps the whole modal content).
 const ModalSectionContext = createContext('body')
 
+// DOM node at the right of the title row; <Modal.HeaderActions> portals into it, so a form
+// rendered as the modal body can put a button (e.g. Translate) in the header.
+const ModalHeaderContext = createContext(null)
+
+const ModalHeaderActions = ({ children }) => {
+  const node = useContext(ModalHeaderContext)
+  return node ? createPortal(children, node) : null
+}
+
 const ModalFooter = ({ children, className }) => {
   const section = useContext(ModalSectionContext)
   return (
@@ -84,6 +93,7 @@ const ModalDialog = ({
   const id = useId()
   const dialogRef = useRef(null)
   const [layer] = useState(() => openStack.length)
+  const [headerActions, setHeaderActions] = useState(null)
   const titleId = `${id}-title`
   const descId = `${id}-desc`
 
@@ -192,9 +202,10 @@ const ModalDialog = ({
               {title && (
                 <div className="flex items-center gap-2">
                   {icon && <IconTile icon={icon} tone={iconTone || tone} />}
-                  <h2 id={titleId} className="min-w-0 font-display text-2xl font-medium leading-8 text-ink">
+                  <h2 id={titleId} className="min-w-0 flex-1 font-display text-2xl font-medium leading-8 text-ink">
                     {title}
                   </h2>
+                  <div ref={setHeaderActions} className="flex shrink-0 items-center gap-2 empty:hidden" />
                 </div>
               )}
               {description && (
@@ -215,7 +226,9 @@ const ModalDialog = ({
               )}
             >
               <BannerOutlet className="mb-3" />
-              <ModalSectionContext.Provider value="body">{body}</ModalSectionContext.Provider>
+              <ModalHeaderContext.Provider value={headerActions}>
+                <ModalSectionContext.Provider value="body">{body}</ModalSectionContext.Provider>
+              </ModalHeaderContext.Provider>
             </div>
           )}
 
@@ -241,6 +254,8 @@ const ModalDialog = ({
  *   </Modal>
  *
  * Legacy API still works: children may end with <Modal.Footer>…</Modal.Footer>.
+ * <Modal.HeaderActions>…</Modal.HeaderActions> anywhere in the body renders at the right of the
+ * title (e.g. the TranslateButton of a form that owns its own state).
  * size: sm 400 | md 448 (Figma, default) | lg 640 | xl 896 | full.
  * tone (icon tile): green | blue | orange | purple | red | amber | pink | neutral.
  * Closes on Esc and overlay click (closeOnEsc / closeOnOverlay); no X unless showCloseButton.
@@ -250,3 +265,4 @@ export const Modal = ({ isOpen, ...props }) =>
   createPortal(<AnimatePresence>{isOpen && <ModalDialog {...props} />}</AnimatePresence>, document.body)
 
 Modal.Footer = ModalFooter
+Modal.HeaderActions = ModalHeaderActions

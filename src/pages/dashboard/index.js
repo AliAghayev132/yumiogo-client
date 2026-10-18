@@ -1,7 +1,7 @@
 export { DashboardPage } from './DashboardPage'
 export { ProfilePage } from './ProfilePage'
 export { UsersPage, UserDetailPage } from './UsersPage'
-export { RestaurantsPage, RestaurantDetailPage } from './RestaurantsPage'
+export { RestaurantsPage, RestaurantDetailPage, ImportRestaurantsPage } from './RestaurantsPage'
 export { ReviewsPage } from './ReviewsPage'
 export { ReportsPage } from './ReportsPage'
 export { ListsPage } from './ListsPage'

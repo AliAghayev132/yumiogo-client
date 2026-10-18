@@ -14,12 +14,23 @@ const PURGED = [LIST, 'AdminStats', 'Catalog', { type: 'AdminReview', id: 'LIST'
  *   GET  /admin/restaurants?page&limit&search&status&cuisine&city&sort&deleted=true
  *        → { restaurants, pagination, counts: { all, active, pending, suspended, rejected, closed, deleted } }
  *   GET  /admin/restaurants/export?…same filters → CSV
- *   GET  /admin/restaurants/:id → { restaurant, stats: { reviews, sentiment, pendingReviews, openReports,
- *        lists, saves, views, menuItems }, recentReviews, reports }   (any status, also deleted)
+ *   GET  /admin/restaurants/:id → { restaurant (+ followerCount, stats: rolling 7d / 30d windows),
+ *        stats: { reviews, sentiment, pendingReviews, openReports, lists, saves, views, followers, menuItems },
+ *        recentReviews (every status), reports }   (any status, also deleted)
+ *   GET  /admin/restaurants/:id/followers?page&limit → { followers: [{ _id, firstName, lastName, email,
+ *        avatar, verified, status, isDeleted, followedAt }], pagination }
  *   POST /admin/restaurants/:id/approve · /reject { reason } · /suspend { reason? } · /restore
  *   PATCH /admin/restaurants/:id/status { status, reason? }
  *   DELETE /admin/restaurants/:id → permanent delete, Trash only (409 otherwise) →
  *        { restaurant: { _id, name }, summary: { reviews, lists, menuItems, menuCategories, reports, files } }
+ *   GET  /admin/restaurants/import/template → { mode, dryRun, strict, restaurants: [2 examples],
+ *        fields: { field: description }, limits: { restaurants, menuCategories, menuItems } }
+ *        (postable as-is)
+ *   POST /admin/restaurants/import { restaurants: [...], mode: create|upsert, dryRun, strict }
+ *        (strict default true; false = unknown catalog names / city become warnings and are dropped)
+ *        → { dryRun, mode, strict, summary: { total, created, updated, skipped, failed },
+ *            rows: [{ index (0-based), name, action: create|update|skip|error, id?, errors: [], warnings: [] }] }
+ *        400 IMPORT_INVALID for a bad body
  *   Create / edit / soft-delete stay on the public resource (admin only):
  *   POST /restaurants · PUT /restaurants/:id · DELETE /restaurants/:id  (→ detail-shaped restaurant)
  */
@@ -35,6 +46,10 @@ export const adminRestaurantsApi = baseApi.injectEndpoints({
     getAdminRestaurant: builder.query({
       query: (id) => `/admin/restaurants/${id}`,
       providesTags: (result, error, id) => [{ type: 'AdminRestaurant', id }],
+    }),
+    getRestaurantFollowers: builder.query({
+      query: ({ id, ...params }) => ({ url: `/admin/restaurants/${id}/followers`, params }),
+      providesTags: (result, error, { id }) => [{ type: 'AdminRestaurant', id }],
     }),
     createRestaurant: builder.mutation({
       query: (body) => ({ url: '/restaurants', method: 'POST', body }),
@@ -82,6 +97,16 @@ export const adminRestaurantsApi = baseApi.injectEndpoints({
       query: ({ q, limit = 5 }) => ({ url: '/places/suggest', params: { q, limit } }),
       keepUnusedDataFor: 300,
     }),
+    // Bulk import (Import restaurants page): the template also documents every field.
+    getRestaurantImportTemplate: builder.query({
+      query: () => '/admin/restaurants/import/template',
+    }),
+    // dryRun validates only (nothing cached changes); a real run can create and update any
+    // restaurant, so it refreshes every restaurant list and detail.
+    importRestaurants: builder.mutation({
+      query: (body) => ({ url: '/admin/restaurants/import', method: 'POST', body }),
+      invalidatesTags: (result, error, { dryRun }) => (dryRun || error ? [] : ['AdminRestaurant', 'AdminStats', 'Catalog']),
+    }),
     // CSV of the filtered list → { csv, filename } (save with utils/saveTextFile).
     exportRestaurants: builder.mutation({
       query: (params = {}) => csvRequest('/admin/restaurants/export', params),
@@ -93,6 +118,7 @@ export const adminRestaurantsApi = baseApi.injectEndpoints({
 export const {
   useGetAdminRestaurantsQuery,
   useGetAdminRestaurantQuery,
+  useGetRestaurantFollowersQuery,
   useCreateRestaurantMutation,
   useUpdateRestaurantMutation,
   useDeleteRestaurantMutation,
@@ -104,4 +130,6 @@ export const {
   useSetRestaurantStatusMutation,
   useLazyGetPlaceSuggestionsQuery,
   useExportRestaurantsMutation,
+  useGetRestaurantImportTemplateQuery,
+  useImportRestaurantsMutation,
 } = adminRestaurantsApi

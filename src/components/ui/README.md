@@ -12,5 +12,7 @@ Conventions:
   with `clsx`.
 - A file that exports components exports only components (React Fast Refresh); shared helpers
   go into `.js` modules (`tokens.js`, `status.js`, `time.js`, `chart.js`, `fieldStyles.js`,
-  `menuFocus.js`).
+  `menuFocus.js`, `translations.js`); hooks get their own `useXxx.js` (`useAutoTranslate.js`).
+- `TranslateButton` / `useAutoTranslate` are the only primitives that call the API (RTK Query
+  hooks from `@store/api`, translate status + `POST /admin/translate`).
 - Keep old props working when changing a component that pages already use.

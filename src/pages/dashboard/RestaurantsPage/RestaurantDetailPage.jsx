@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
-import { ArrowLeft, Store, Star, Trash2, Ban, CircleAlert } from 'lucide-react'
+import { ArrowLeft, Store, Star, Trash2, Ban, CircleAlert, Hourglass, MoreVertical, X } from 'lucide-react'
 import {
   Badge,
   Banner,
   Button,
   Card,
+  DropdownMenu,
   EmptyState,
   IconButton,
   Skeleton,
@@ -29,9 +30,23 @@ import { MenuTab } from './MenuTab'
 
 const fullName = (u) => [u?.firstName, u?.lastName].filter(Boolean).join(' ').trim()
 
+/**
+ * ⋮ menu: the transitions the server allows beyond the header buttons
+ * (ModerationService.moderateRestaurant: reject pending / active / suspended, suspend active /
+ * pending; PATCH /status for "back to pending").
+ */
+const moreItems = (r, actions) => {
+  const items = []
+  if (['active', 'suspended'].includes(r.status)) items.push({ label: 'Reject…', icon: X, onSelect: () => actions.reject(r) })
+  if (r.status === 'pending') items.push({ label: 'Suspend…', icon: Ban, onSelect: () => actions.suspend(r) })
+  if (r.status !== 'pending') items.push({ label: 'Move to pending', icon: Hourglass, onSelect: () => actions.toPending(r) })
+  return items
+}
+
 const Header = ({ r, actions, onPurged }) => {
   const trash = r.isDeleted
   const reviewed = r.reviewCount > 0
+  const more = trash ? [] : moreItems(r, actions)
   return (
     <Card padding="sm" className="flex flex-wrap items-center gap-4">
       <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line bg-subtle">
@@ -102,6 +117,12 @@ const Header = ({ r, actions, onPurged }) => {
               </Button>
             )}
             <IconButton icon={Trash2} label="Remove restaurant" tone="danger" variant="secondary" onClick={() => actions.remove(r)} />
+            {more.length > 0 && (
+              <DropdownMenu
+                trigger={<IconButton icon={MoreVertical} label="More moderation actions" variant="secondary" />}
+                items={more}
+              />
+            )}
           </>
         )}
       </div>
@@ -123,6 +144,8 @@ const Workspace = ({ data, tab, setTab }) => {
   const [updateRestaurant, { isLoading: saving }] = useUpdateRestaurantMutation()
   const [initial, setInitial] = useState(() => toForm(restaurant))
   const [form, setForm] = useState(initial)
+  // Language of the translatable General fields (en | az | ru).
+  const [lang, setLang] = useState('en')
 
   const meta = metaData?.data
   const catalog = catalogData?.data || null
@@ -145,6 +168,7 @@ const Workspace = ({ data, tab, setTab }) => {
     const { payload, error, tab: errorTab } = toPayload(form, { priceLevels })
     if (error) {
       if (errorTab && errorTab !== tab) setTab(errorTab)
+      if (!form.name.trim()) setLang('en')
       banner.error(error)
       return
     }
@@ -177,7 +201,7 @@ const Workspace = ({ data, tab, setTab }) => {
       )}
       {!trash && ['rejected', 'suspended', 'closed'].includes(restaurant.status) && (
         <Banner tone={reasonTone}>
-          {restaurant.status === 'rejected' ? 'Rejected' : 'Suspended'}
+          {{ rejected: 'Rejected', suspended: 'Suspended', closed: 'Closed' }[restaurant.status]}
           {restaurant.moderatedBy ? ` by ${fullName(restaurant.moderatedBy)}` : ''}
           {restaurant.moderatedAt ? ` on ${formatDateTime(restaurant.moderatedAt)}` : ''}
           {restaurant.statusReason ? `. Reason: ${restaurant.statusReason}` : '.'}
@@ -227,6 +251,8 @@ const Workspace = ({ data, tab, setTab }) => {
                 catalog={catalog}
                 priceLevels={priceLevels}
                 disabled={trash}
+                lang={lang}
+                setLang={setLang}
               />
             )}
             {tab === 'hours' && (

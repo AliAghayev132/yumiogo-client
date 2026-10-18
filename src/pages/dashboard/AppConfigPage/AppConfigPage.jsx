@@ -21,11 +21,17 @@ import {
   EmptyState,
   ImageField,
   Input,
+  LanguageTabs,
+  LocalizedInput,
+  LocalizedTextarea,
   OrderButtons,
+  TranslateButton,
   Skeleton,
   Switch,
-  Textarea,
   UnsavedBar,
+  languageNote,
+  translationStatus,
+  withTranslation,
   moveItem,
   useBanner,
   errorMessage,
@@ -47,6 +53,8 @@ import {
   toPayload,
   changedFields,
   validate,
+  cardTranslationEntries,
+  CARD_TRANSLATE,
 } from './settingsForm'
 
 // IANA zones for the timezone suggestions (older browsers just get a text field).
@@ -97,6 +105,8 @@ const describePath = (path, form) => {
       return `App stores · ${APP_LINK_META[index]?.label || index}`
     case 'inviteGoal':
       return 'Invites · Friends to invite'
+    case 'ratingDisplay':
+      return 'Review sentiments · Show liked % from'
     case 'surprise':
       return 'Surprise me copy'
     case 'homeSections':
@@ -117,6 +127,10 @@ const describePath = (path, form) => {
       return path
   }
 }
+
+// One line at the top of a card while AZ / RU is selected.
+const LanguageNote = ({ lang }) =>
+  lang === 'en' ? null : <p className="mb-4 text-xs leading-4 text-ink-muted">{languageNote(lang)}</p>
 
 const LoadingState = () => (
   <div className="flex max-w-5xl flex-col gap-6">
@@ -178,6 +192,17 @@ const AppConfigForm = ({ settings }) => {
   const changes = useMemo(() => changedFields(toPayload(form), original), [form, original])
   const errors = useMemo(() => validate(form), [form])
   const dirty = Object.keys(changes).length > 0
+  // Language of the translatable texts (en | az | ru) — one switch for the whole page, shown
+  // in each card header with that card's filled state.
+  const [lang, setLang] = useState('en')
+  const translated = useMemo(() => cardTranslationEntries(form), [form])
+  // Card header: Translate (that card's texts) + the language switch.
+  const languageTabs = (card) => (
+    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+      <TranslateButton form={form} setForm={setForm} texts={CARD_TRANSLATE[card]} onLanguageChange={setLang} />
+      <LanguageTabs value={lang} onChange={setLang} status={translationStatus(translated[card])} />
+    </div>
+  )
 
   // Warn before closing the tab with unsaved edits.
   useEffect(() => {
@@ -205,6 +230,68 @@ const AppConfigForm = ({ settings }) => {
     }))
   const moveRow = (list) => (from, to) => setForm((f) => ({ ...f, [list]: moveItem(f[list], from, to) }))
 
+  // ----- translations (the selected language) -----
+  // Root texts (support card).
+  const rootTr = (field) => ({
+    lang,
+    translation: form.translations[lang]?.[field],
+    onTranslationChange: (value) =>
+      setForm((f) => ({ ...f, translations: withTranslation(f.translations, lang, field, value) })),
+  })
+  // A keyed-list row's text.
+  const rowTr = (list, index, field) => ({
+    lang,
+    translation: form[list][index].translations[lang]?.[field],
+    onTranslationChange: (value) =>
+      setForm((f) => ({
+        ...f,
+        [list]: f[list].map((row, i) =>
+          i === index ? { ...row, translations: withTranslation(row.translations, lang, field, value) } : row
+        ),
+      })),
+  })
+  // Home section tab label `t` (positional).
+  const tabTr = (index, t) => ({
+    lang,
+    translation: form.homeSections[index].translations[lang]?.tabLabels?.[t],
+    onTranslationChange: (value) =>
+      setForm((f) => ({
+        ...f,
+        homeSections: f.homeSections.map((row, i) => {
+          if (i !== index) return row
+          const tabLabels = row.translations[lang].tabLabels.map((label, k) => (k === t ? value : label))
+          return { ...row, translations: { ...row.translations, [lang]: { ...row.translations[lang], tabLabels } } }
+        }),
+      })),
+  })
+  const surpriseTr = (key) => ({
+    lang,
+    translation: form.surprise.translations[lang]?.[key],
+    onTranslationChange: (value) =>
+      setForm((f) => ({
+        ...f,
+        surprise: { ...f.surprise, translations: withTranslation(f.surprise.translations, lang, key, value) },
+      })),
+  })
+  const distanceTr = (metres) => ({
+    lang,
+    translation: form.filters.translations[lang]?.distanceLabels?.[String(metres)],
+    onTranslationChange: (value) =>
+      setForm((f) => {
+        const current = f.filters.translations[lang]
+        return {
+          ...f,
+          filters: {
+            ...f.filters,
+            translations: {
+              ...f.filters.translations,
+              [lang]: { ...current, distanceLabels: { ...current.distanceLabels, [String(metres)]: value } },
+            },
+          },
+        }
+      }),
+  })
+
   const discard = () => setForm(toForm(settings))
 
   const save = async () => {
@@ -214,6 +301,8 @@ const AppConfigForm = ({ settings }) => {
     if (errorBanner.current) banner.dismiss(errorBanner.current)
     errorBanner.current = null
     if (blocking.length) {
+      // English texts are the required ones: show them.
+      setLang('en')
       errorBanner.current = banner.error(
         <ul className="list-disc pl-5">
           {blocking.slice(0, 8).map(([path, message]) => (
@@ -261,7 +350,9 @@ const AppConfigForm = ({ settings }) => {
         icon={LifeBuoy}
         title="Support & contacts"
         description="Shown on the app's Help & support screen and the website."
+        action={languageTabs('support')}
       >
+        <LanguageNote lang={lang} />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="rounded-lg border border-line bg-canvas px-4 py-3 text-sm text-ink-secondary sm:col-span-2">
             <span className="font-semibold text-ink">{settings.appName}</span> · {settings.supportEmail}
@@ -281,9 +372,15 @@ const AppConfigForm = ({ settings }) => {
             placeholder="+994 12 345 67 89"
             helperText="Optional — hidden in the app when empty."
           />
-          <Input label="Company address" value={form.companyAddress} onChange={setField('companyAddress')} />
+          <LocalizedInput
+            {...rootTr('companyAddress')}
+            label="Company address"
+            value={form.companyAddress}
+            onChange={setField('companyAddress')}
+          />
           <div className="sm:col-span-2">
-            <Input
+            <LocalizedInput
+              {...rootTr('supportReplyNote')}
               label="Reply time note"
               value={form.supportReplyNote}
               onChange={setField('supportReplyNote')}
@@ -355,7 +452,9 @@ const AppConfigForm = ({ settings }) => {
             {'{maxDiscount}'}% off” appears as “Up to 50% off”.
           </>
         }
+        action={languageTabs('home')}
       >
+        <LanguageNote lang={lang} />
         <div className="flex flex-col gap-3">
           {form.homeSections.map((section, i) => {
             const meta = HOME_SECTION_META[section.key] || { label: section.key }
@@ -386,28 +485,36 @@ const AppConfigForm = ({ settings }) => {
 
                 <div className={clsx('mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2', !section.isActive && 'opacity-60')}>
                   <div className="sm:col-span-2">
-                    <Input
+                    <LocalizedInput
+                      {...rowTr('homeSections', i, 'title')}
+                      translationHint={null}
                       label="Title"
                       value={section.title}
                       onChange={(e) => setRow('homeSections', i, { title: e.target.value })}
                       error={errors[`${path}.title`]}
                     />
                   </div>
-                  <Input
+                  <LocalizedInput
+                    {...rowTr('homeSections', i, 'subtitle')}
+                    translationHint={null}
                     label="Subtitle"
                     value={section.subtitle}
                     onChange={(e) => setRow('homeSections', i, { subtitle: e.target.value })}
                     placeholder="Optional"
                   />
-                  <Input
+                  <LocalizedInput
+                    {...rowTr('homeSections', i, 'ctaLabel')}
+                    translationHint={null}
                     label="Button label"
                     value={section.ctaLabel}
                     onChange={(e) => setRow('homeSections', i, { ctaLabel: e.target.value })}
                     placeholder="Optional"
                   />
                   {meta.tabs?.map((tabLabel, t) => (
-                    <Input
+                    <LocalizedInput
                       key={tabLabel}
+                      {...tabTr(i, t)}
+                      translationHint={null}
                       label={tabLabel}
                       value={section.tabLabels[t] ?? ''}
                       onChange={(e) =>
@@ -444,7 +551,9 @@ const AppConfigForm = ({ settings }) => {
         icon={ThumbsUp}
         title="Recommendations"
         description="The tiles of the Home “Recommends” rail and Search “Popular also search for”, in this order. Each opens its restaurant collection; empty collections are skipped."
+        action={languageTabs('recommendations')}
       >
+        <LanguageNote lang={lang} />
         <div className="flex flex-col gap-3">
           {form.recommendations.map((tile, i) => (
             <div
@@ -476,13 +585,17 @@ const AppConfigForm = ({ settings }) => {
                 )}
               >
                 <div className="flex flex-col gap-3">
-                  <Input
+                  <LocalizedInput
+                    {...rowTr('recommendations', i, 'title')}
+                    translationHint={null}
                     label="Title"
                     value={tile.title}
                     onChange={(e) => setRow('recommendations', i, { title: e.target.value })}
                     error={errors[`recommendations.${i}.title`]}
                   />
-                  <Textarea
+                  <LocalizedTextarea
+                    {...rowTr('recommendations', i, 'description')}
+                    translationHint={null}
                     label="Description"
                     rows={2}
                     value={tile.description}
@@ -509,7 +622,9 @@ const AppConfigForm = ({ settings }) => {
         icon={Sparkles}
         title="Surprise me copy"
         description="Text on the Surprise me screen. The Home card's text is edited in Home layout above."
+        action={languageTabs('surprise')}
       >
+        <LanguageNote lang={lang} />
         <div className="flex flex-col gap-6">
           {SURPRISE_GROUPS.map((group) => (
             <div key={group.title}>
@@ -517,6 +632,8 @@ const AppConfigForm = ({ settings }) => {
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {group.fields.map((field) => {
                   const props = {
+                    ...surpriseTr(field.key),
+                    translationHint: null,
                     label: field.label,
                     value: form.surprise[field.key],
                     onChange: (e) => setGroup('surprise', field.key, e.target.value),
@@ -525,10 +642,10 @@ const AppConfigForm = ({ settings }) => {
                   }
                   return field.multiline ? (
                     <div key={field.key} className="sm:col-span-2">
-                      <Textarea {...props} rows={2} />
+                      <LocalizedTextarea {...props} rows={2} />
                     </div>
                   ) : (
-                    <Input key={field.key} {...props} />
+                    <LocalizedInput key={field.key} {...props} />
                   )
                 })}
               </div>
@@ -543,6 +660,7 @@ const AppConfigForm = ({ settings }) => {
         icon={SlidersHorizontal}
         title="Search & filters"
         description="Options on the Filter screen, the price slider, the search radius and travel times."
+        action={languageTabs('filters')}
       >
         <div className="flex flex-col gap-6">
           <div>
@@ -562,8 +680,10 @@ const AppConfigForm = ({ settings }) => {
                   <p className="mb-2 text-sm leading-[18px] text-ink-tertiary">Distance labels</p>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     {f.distanceOptions.map((metres) => (
-                      <Input
+                      <LocalizedInput
                         key={metres}
+                        {...distanceTr(metres)}
+                        translationHint={formatMetres(metres)}
                         value={f.distanceLabels[String(metres)] ?? ''}
                         onChange={(e) => setDistanceLabel(metres, e.target.value)}
                         placeholder={`${formatMetres(metres)} (default)`}
@@ -575,7 +695,9 @@ const AppConfigForm = ({ settings }) => {
                     ))}
                   </div>
                   <p className="mt-1.5 text-xs text-ink-muted">
-                    Optional wording for each distance chip, e.g. “Walking distance”. Empty = the distance itself.
+                    {lang === 'en'
+                      ? 'Optional wording for each distance chip, e.g. “Walking distance”. Empty = the distance itself.'
+                      : languageNote(lang)}
                   </p>
                 </div>
               )}
@@ -710,7 +832,9 @@ const AppConfigForm = ({ settings }) => {
         icon={ArrowDownUp}
         title="Sort options"
         description="The “Sort by” choices, in this order. Hidden options are not offered. The explanation is shown when the (?) next to an option is tapped."
+        action={languageTabs('sort')}
       >
+        <LanguageNote lang={lang} />
         {errors.sortOptions && <p className="mb-3 text-sm text-error">{errors.sortOptions}</p>}
         <div className="divide-y divide-line">
           {form.sortOptions.map((option, i) => (
@@ -723,13 +847,17 @@ const AppConfigForm = ({ settings }) => {
                 <p className="mt-1 text-xs text-ink-muted">{SORT_KEY_HINTS[option.key]}</p>
               </div>
               <div className={clsx('flex min-w-[220px] flex-1 flex-col gap-2', !option.isActive && 'opacity-60')}>
-                <Input
+                <LocalizedInput
+                  {...rowTr('sortOptions', i, 'label')}
+                  translationHint={null}
                   value={option.label}
                   onChange={(e) => setRow('sortOptions', i, { label: e.target.value })}
                   error={errors[`sortOptions.${i}.label`]}
                   aria-label={`${option.key} label`}
                 />
-                <Textarea
+                <LocalizedTextarea
+                  {...rowTr('sortOptions', i, 'description')}
+                  translationHint={null}
                   value={option.description}
                   onChange={(e) => setRow('sortOptions', i, { description: e.target.value })}
                   rows={2}
@@ -756,7 +884,9 @@ const AppConfigForm = ({ settings }) => {
         icon={TrendingUp}
         title="Trending this month"
         description="The choices of the “Trending this month” sheet in Search, in this order."
+        action={languageTabs('trending')}
       >
+        <LanguageNote lang={lang} />
         <div className="divide-y divide-line">
           {form.trendingOptions.map((option, i) => (
             <div key={option.key} className="flex flex-wrap items-start gap-3 py-3 sm:flex-nowrap">
@@ -768,13 +898,17 @@ const AppConfigForm = ({ settings }) => {
                 <p className="mt-1 text-xs text-ink-muted">{TRENDING_KEY_HINTS[option.key]}</p>
               </div>
               <div className={clsx('flex min-w-[220px] flex-1 flex-col gap-2', !option.isActive && 'opacity-60')}>
-                <Input
+                <LocalizedInput
+                  {...rowTr('trendingOptions', i, 'label')}
+                  translationHint={null}
                   value={option.label}
                   onChange={(e) => setRow('trendingOptions', i, { label: e.target.value })}
                   error={errors[`trendingOptions.${i}.label`]}
                   aria-label={`${option.key} label`}
                 />
-                <Textarea
+                <LocalizedTextarea
+                  {...rowTr('trendingOptions', i, 'description')}
+                  translationHint={null}
                   value={option.description}
                   onChange={(e) => setRow('trendingOptions', i, { description: e.target.value })}
                   rows={2}
@@ -806,7 +940,9 @@ const AppConfigForm = ({ settings }) => {
             <KeyChip>$</KeyChip> … <KeyChip>$$$$</KeyChip>). Leave “Up to” empty on the last level for “and above”.
           </>
         }
+        action={languageTabs('price-levels')}
       >
+        <LanguageNote lang={lang} />
         <div className="flex flex-col gap-3">
           <div className="hidden grid-cols-[4rem_1fr_1fr_9rem] gap-3 text-xs text-ink-muted sm:grid">
             <span>Key</span>
@@ -819,14 +955,18 @@ const AppConfigForm = ({ settings }) => {
               <div className="pt-3">
                 <KeyChip>{level.key}</KeyChip>
               </div>
-              <Input
+              <LocalizedInput
+                {...rowTr('priceLevels', i, 'label')}
+                translationHint={null}
                 value={level.label}
                 onChange={(e) => setRow('priceLevels', i, { label: e.target.value })}
                 placeholder="Label, e.g. ₼₼"
                 error={errors[`priceLevels.${i}.label`]}
                 aria-label={`${level.key} label`}
               />
-              <Input
+              <LocalizedInput
+                {...rowTr('priceLevels', i, 'hint')}
+                translationHint={null}
                 value={level.hint}
                 onChange={(e) => setRow('priceLevels', i, { hint: e.target.value })}
                 placeholder="Hint, e.g. Moderate"
@@ -853,7 +993,9 @@ const AppConfigForm = ({ settings }) => {
         icon={Bell}
         title="Notification settings"
         description="Labels of the notification switches in the app's Settings screen."
+        action={languageTabs('notifications')}
       >
+        <LanguageNote lang={lang} />
         <div className="flex flex-col gap-3">
           {form.notificationOptions.map((option, i) => (
             <div key={option.key} className="grid grid-cols-1 items-start gap-3 sm:grid-cols-[9rem_1fr_1.5fr]">
@@ -861,14 +1003,18 @@ const AppConfigForm = ({ settings }) => {
                 <KeyChip>{option.key}</KeyChip>
                 <p className="mt-1 text-xs text-ink-muted">{NOTIFICATION_KEY_HINTS[option.key]}</p>
               </div>
-              <Input
+              <LocalizedInput
+                {...rowTr('notificationOptions', i, 'label')}
+                translationHint={null}
                 value={option.label}
                 onChange={(e) => setRow('notificationOptions', i, { label: e.target.value })}
                 placeholder="Label"
                 error={errors[`notificationOptions.${i}.label`]}
                 aria-label={`${option.key} label`}
               />
-              <Input
+              <LocalizedInput
+                {...rowTr('notificationOptions', i, 'description')}
+                translationHint={null}
                 value={option.description}
                 onChange={(e) => setRow('notificationOptions', i, { description: e.target.value })}
                 placeholder="Description"
@@ -885,7 +1031,23 @@ const AppConfigForm = ({ settings }) => {
         icon={Smile}
         title="Review sentiments"
         description="The three reactions people pick when they review a visit. Also used for the charts in this panel."
+        action={languageTabs('sentiments')}
       >
+        <LanguageNote lang={lang} />
+        <div className="mb-5 grid grid-cols-1 gap-4 border-b border-line pb-5 sm:grid-cols-2">
+          <Input
+            type="number"
+            min={1}
+            max={100}
+            step={1}
+            label="Show liked % from N reviews"
+            value={form.ratingDisplay.minReviewsForPercent}
+            onChange={(e) => setGroup('ratingDisplay', 'minReviewsForPercent', e.target.value)}
+            error={errors['ratingDisplay.minReviewsForPercent']}
+            rightIcon={<span className="text-sm text-ink-muted">reviews</span>}
+            helperText="Restaurants with fewer reviews show a “New” badge and their review count instead of “87% liked” (1–100)."
+          />
+        </div>
         <div className="flex flex-col gap-4">
           {form.sentiments.map((s, i) => {
             const swatch = /^#[0-9a-fA-F]{6}$/.test(s.color) ? s.color : '#cccccc'
@@ -911,7 +1073,9 @@ const AppConfigForm = ({ settings }) => {
                   className="text-center"
                   aria-label={`${s.key} emoji`}
                 />
-                <Input
+                <LocalizedInput
+                  {...rowTr('sentiments', i, 'label')}
+                  translationHint={null}
                   value={s.label}
                   onChange={(e) => setRow('sentiments', i, { label: e.target.value })}
                   placeholder="Label"

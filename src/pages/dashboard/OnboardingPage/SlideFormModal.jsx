@@ -1,12 +1,34 @@
 import { useState } from 'react'
 import { Plus, Pencil, ExternalLink } from 'lucide-react'
 import { clsx } from 'clsx'
-import { Modal, Input, Textarea, SwitchRow, Button, ImageField, useBanner, errorMessage } from '@components'
+import {
+  Modal,
+  Input,
+  SwitchRow,
+  Button,
+  ImageField,
+  LanguageBar,
+  LocalizedInput,
+  LocalizedTextarea,
+  TranslateButton,
+  localizedTexts,
+  toTranslationForm,
+  toTranslationPayload,
+  translationEntries,
+  translationStatus,
+  withTranslation,
+  useBanner,
+  errorMessage,
+} from '@components'
 import { useCreateOnboardingSlideMutation, useUpdateOnboardingSlideMutation } from '@store/api'
 import { SlidePreview } from './SlidePreview'
 
 // Ionicons names the default slides use — quick picks for the icon field.
 const ICON_SUGGESTIONS = ['restaurant', 'map', 'heart', 'sparkles', 'people', 'star', 'location', 'compass']
+
+// Texts with az / ru versions.
+const SLIDE_TEXTS = ['title', 'subtitle']
+const SLIDE_TRANSLATE = localizedTexts(SLIDE_TEXTS)
 
 /** Create / edit one onboarding slide. `slide` null = create. */
 export const SlideFormModal = ({ slide, onClose }) => {
@@ -14,16 +36,27 @@ export const SlideFormModal = ({ slide, onClose }) => {
   const [createSlide, { isLoading: creating }] = useCreateOnboardingSlideMutation()
   const [updateSlide, { isLoading: updating }] = useUpdateOnboardingSlideMutation()
   const banner = useBanner()
+  const [lang, setLang] = useState('en')
   const [form, setForm] = useState({
     title: slide?.title || '',
     subtitle: slide?.subtitle || '',
     icon: slide?.icon || '',
     image: slide?.image || null,
     isActive: slide?.isActive ?? true,
+    translations: toTranslationForm(slide?.translations, SLIDE_TEXTS),
   })
   const [titleError, setTitleError] = useState('')
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
+  // AZ / RU text of `field` in the selected language.
+  const tr = (field) => ({
+    lang,
+    translation: form.translations[lang]?.[field],
+    onTranslationChange: (value) =>
+      setForm((f) => ({ ...f, translations: withTranslation(f.translations, lang, field, value) })),
+  })
+  // The preview shows the selected language (English where a text is not translated).
+  const localized = (field) => (lang !== 'en' && form.translations[lang]?.[field]?.trim()) || form[field]
 
   const submit = async () => {
     const payload = {
@@ -32,8 +65,12 @@ export const SlideFormModal = ({ slide, onClose }) => {
       icon: form.icon.trim() || null,
       image: form.image || null,
       isActive: form.isActive,
+      translations: toTranslationPayload(form.translations, SLIDE_TEXTS),
     }
-    if (!payload.title) return setTitleError('Title is required')
+    if (!payload.title) {
+      setLang('en')
+      return setTitleError('Title is required')
+    }
 
     try {
       if (isEdit) await updateSlide({ id: slide._id, ...payload }).unwrap()
@@ -65,9 +102,18 @@ export const SlideFormModal = ({ slide, onClose }) => {
         </>
       }
     >
+      <Modal.HeaderActions>
+        <TranslateButton form={form} setForm={setForm} texts={SLIDE_TRANSLATE} onLanguageChange={setLang} />
+      </Modal.HeaderActions>
       <div className="grid grid-cols-1 gap-6 md:grid-cols-[1fr_16rem]">
         <div className="flex flex-col gap-3">
-          <Input
+          <LanguageBar
+            value={lang}
+            onChange={setLang}
+            status={translationStatus(translationEntries(form, form.translations, SLIDE_TEXTS))}
+          />
+          <LocalizedInput
+            {...tr('title')}
             label="Title"
             value={form.title}
             onChange={(e) => {
@@ -78,7 +124,8 @@ export const SlideFormModal = ({ slide, onClose }) => {
             error={titleError}
             autoFocus
           />
-          <Textarea
+          <LocalizedTextarea
+            {...tr('subtitle')}
             label="Subtitle"
             value={form.subtitle}
             onChange={set('subtitle')}
@@ -140,7 +187,7 @@ export const SlideFormModal = ({ slide, onClose }) => {
 
         <div>
           <p className="mb-2 text-sm leading-[18px] text-ink-tertiary">Preview</p>
-          <SlidePreview slide={form} />
+          <SlidePreview slide={{ ...form, title: localized('title'), subtitle: localized('subtitle') }} />
         </div>
       </div>
     </Modal>

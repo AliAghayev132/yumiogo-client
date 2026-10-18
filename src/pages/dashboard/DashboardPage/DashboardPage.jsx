@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { Users, Store, MessageSquareMore, CircleAlert, Bookmark, Activity } from 'lucide-react'
+import { Users, Store, MessageSquareMore, CircleAlert, Bookmark, Activity, Star, Hourglass, UserCheck } from 'lucide-react'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 import {
   StatCard,
@@ -50,10 +50,14 @@ const ActivityRow = ({ item }) => {
   )
 }
 
+// "Total users · 12 new in 7 days" — the period's additions under each total.
+const newIn = (label, count, days) => (count ? `${label} · ${formatNumber(count)} new in ${days} days` : label)
+
 /**
- * Dashboard (Figma 1263:21808): 4 stat cards with trends (period = the chart tabs), New users
- * chart with 7d / 30d / 90d tabs, Reviews by rating donut, Recent activity with links to the
- * moderation pages.
+ * Dashboard (Figma 1263:21808): 4 stat cards with trends (period = the chart tabs) and the
+ * period's new items, a "waiting for you" row (average rating, pending reviews / restaurants /
+ * users with links to the filtered tables), New users chart with 7d / 30d / 90d tabs, Reviews
+ * by rating donut, Recent activity with links to the moderation pages.
  */
 export const DashboardPage = () => {
   const navigate = useNavigate()
@@ -70,11 +74,28 @@ export const DashboardPage = () => {
   const series = a.series || []
   const statsLoading = stats.isLoading || (stats.isFetching && !stats.data)
 
+  // Trends: new users / restaurants / reviews vs the previous period; pending reports = open now
+  // vs open when the period started (openReportsChange — reportsChange compares new reports filed).
   const cards = [
-    { key: 'users', icon: Users, tone: 'blue', value: s.totalUsers, label: 'Total users', trend: s.usersChange, to: '/dashboard/users' },
-    { key: 'restaurants', icon: Store, tone: 'orange', value: s.totalRestaurants, label: 'Restaurants', trend: s.restaurantsChange, to: '/dashboard/restaurants' },
-    { key: 'reviews', icon: MessageSquareMore, tone: 'purple', value: s.totalReviews, label: 'Total reviews', trend: s.reviewsChange, to: '/dashboard/reviews' },
-    { key: 'reports', icon: CircleAlert, tone: 'red', value: s.openReports, label: 'Pending reports', trend: s.reportsChange, invertTrend: true, to: '/dashboard/reports' },
+    { key: 'users', icon: Users, tone: 'blue', value: s.totalUsers, label: newIn('Total users', s.newUsers, days), trend: s.usersChange, to: '/dashboard/users' },
+    { key: 'restaurants', icon: Store, tone: 'orange', value: s.totalRestaurants, label: newIn('Restaurants', s.newRestaurants, days), trend: s.restaurantsChange, to: '/dashboard/restaurants' },
+    { key: 'reviews', icon: MessageSquareMore, tone: 'purple', value: s.totalReviews, label: newIn('Total reviews', s.newReviews, days), trend: s.reviewsChange, to: '/dashboard/reviews' },
+    {
+      key: 'reports',
+      icon: CircleAlert,
+      tone: 'red',
+      value: s.openReports,
+      label: newIn('Pending reports', s.newReports, days),
+      trend: s.openReportsChange,
+      invertTrend: true,
+      to: '/dashboard/reports?status=active',
+    },
+  ]
+  const queue = [
+    { key: 'rating', icon: Star, tone: 'orange', value: s.avgRating || 0, decimals: 2, label: 'Average review score', to: '/dashboard/analytics' },
+    { key: 'pendingReviews', icon: MessageSquareMore, tone: 'purple', value: s.pendingReviews, label: 'Reviews waiting (pending + flagged)', to: '/dashboard/reviews?status=pending' },
+    { key: 'pendingRestaurants', icon: Hourglass, tone: 'amber', value: s.pendingRestaurants, label: 'Restaurants awaiting approval', to: '/dashboard/restaurants?status=pending' },
+    { key: 'pendingUsers', icon: UserCheck, tone: 'green', value: s.pendingUsers, label: 'Users awaiting approval', to: '/dashboard/users?status=pending' },
   ]
 
   return (
@@ -87,6 +108,12 @@ export const DashboardPage = () => {
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
         {cards.map(({ key, to, ...card }) => (
+          <StatCard key={key} {...card} value={card.value ?? 0} loading={statsLoading} onClick={() => navigate(to)} />
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
+        {queue.map(({ key, to, ...card }) => (
           <StatCard key={key} {...card} value={card.value ?? 0} loading={statsLoading} onClick={() => navigate(to)} />
         ))}
       </div>
